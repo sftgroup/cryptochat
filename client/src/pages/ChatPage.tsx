@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend, searchUsers, getGroups } from '../lib/api';
-import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, decrypt, tryDecrypt, type KeyPair, type EncryptedMessage } from '../lib/crypto';
+import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, tryDecrypt, type KeyPair } from '../lib/crypto';
 import { getPubkeyFromChain } from '../lib/registry';
-import { encodeTxMessage, decodeTxMessage } from '../lib/tx';
-import type { TxMessage, TransferPayload } from '../lib/tx';
+import { decodeTxMessage } from '../lib/tx';
+import type { TransferPayload } from '../lib/tx';
 import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
 import IpfsMomentContent from '../components/IpfsMomentContent';
@@ -15,16 +15,13 @@ interface GroupInfo { id: string; name: string; description: string | null; memb
 interface DmMessage { id: string; content: string; sender: string; time: number; }
 
 interface Props {
-  cryptoStatus: 'ready' | 'error';
-  cryptoError: string;
   myAddress: string;
   myPubkeyRegistered: boolean;
   onPubkeyRegistered: () => void;
-  onLogout: () => void;
   onGoProfile: () => void;
 }
 
-export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubkeyRegistered, onPubkeyRegistered, onLogout, onGoProfile }: Props) {
+export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegistered, onGoProfile }: Props) {
   const user = authStore.user!;
   const [tab, setTab] = useState<'friends' | 'groups' | 'moments' | 'requests'>('friends');
   const [friends, setFriends] = useState<FriendInfo[]>([]);
@@ -48,7 +45,7 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
   const [moments, setMoments] = useState<any[]>([]);
   const [newMoment, setNewMoment] = useState('');
   const [postingMoment, setPostingMoment] = useState(false);
-  const pollRef = useRef<ReturnType<typeof setInterval>>();
+  const pollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const lastMsgIdRef = useRef('');
   const keyPairRef = useRef<KeyPair | null>(null);
   const sharedKeysRef = useRef<Map<string, CryptoKey>>(new Map());
@@ -314,38 +311,49 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
   }, [addFriendAddr]);
 
   function getAvatarLetter(s: string) { return (s || '?')[0].toUpperCase(); }
+  function getAvatarColor(s: string) {
+    const palettes = [
+      ['#1d9bf0','#7856ff'],['#f4212e','#ff7a00'],['#00ba7c','#10c469'],
+      ['#7856ff','#c069ff'],['#ff7a00','#ffc700'],['#e91e63','#ff5252'],
+      ['#00bcd4','#26c6da'],['#7cb342','#aeea00'],['#ff6f00','#ff9100'],
+    ];
+    let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0;
+    return palettes[Math.abs(h) % palettes.length];
+  }
   const shortAddr = myAddress ? `${myAddress.slice(0, 6)}...${myAddress.slice(-4)}` : '';
 
   // Crypto status indicator
-  const cryptoReady = cryptoStatus === 'ready' && encryptionReady && myPubkeyRegistered;
+  const cryptoReady = encryptionReady && myPubkeyRegistered;
 
   return (
-    <div className="h-screen flex flex-col bg-white overflow-hidden" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'}}>
-      {/* TOP BAR */}
-      <header className="flex items-center justify-between px-4 border-b border-[#eff3f4] flex-shrink-0 bg-white" style={{height:52}}>
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50/30 overflow-hidden" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'}}>
+      {/* TOP BAR — glass-morphism */}
+      <header className="flex items-center justify-between px-5 flex-shrink-0 bg-white/80 backdrop-blur-md border-b border-slate-200/60 shadow-sm" style={{height:52}}>
         <div className="flex items-center gap-3">
-          <h1 className="text-[#0f1419] font-bold text-lg">CryptChat</h1>
-          {/* E2EE status */}
+          <div className="text-2xl">🔐</div>
+          <h1 className="text-slate-800 font-bold text-lg tracking-tight">CryptChat</h1>
           {cryptoReady ? (
-            <span className="text-[#00ba7c] text-xs bg-[#00ba7c]/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00ba7c]" />
-              🔐 E2EE
+            <span className="text-emerald-600 text-xs bg-emerald-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-emerald-200/50">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              E2EE
             </span>
           ) : (
-            <span className="text-[#ffd400] text-xs bg-[#ffd400]/10 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#ffd400] animate-pulse" />
-              Setting up encryption...
+            <span className="text-amber-600 text-xs bg-amber-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-amber-200/50">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              Initializing...
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onGoProfile}
-            className="flex items-center gap-2 bg-[#f7f9f9] hover:bg-[#eff3f4] border border-[#eff3f4] rounded-full px-3 py-1.5 transition-colors cursor-pointer" title="View Profile">
-            <span className={`w-2 h-2 rounded-full ${cryptoReady ? 'bg-[#00ba7c]' : 'bg-[#ffd400] animate-pulse'}`} />
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold">
-              {getAvatarLetter(user.displayName || user.address)}
-            </div>
-            <span className="text-[#0f1419] text-sm font-medium hidden sm:inline">
+            className="flex items-center gap-2.5 bg-white hover:bg-slate-50 border border-slate-200 rounded-full px-3 py-1.5 transition-all cursor-pointer shadow-sm hover:shadow" title="View Profile">
+            <span className={`w-2 h-2 rounded-full ${cryptoReady ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
+            {(() => { const [c1, c2] = getAvatarColor(user.displayName || user.address); return (
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
+                {getAvatarLetter(user.displayName || user.address)}
+              </div>
+            );})()}
+            <span className="text-slate-700 text-sm font-medium hidden sm:inline">
               {user.displayName || shortAddr}
             </span>
           </button>
@@ -353,75 +361,80 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* LEFT SIDEBAR */}
-        <aside className="w-72 flex flex-col bg-white flex-shrink-0 border-r border-[#eff3f4]">
-          <div className="flex border-b border-[#eff3f4] bg-white">
+        {/* LEFT SIDEBAR — light gradient */}
+        <aside className="w-72 flex flex-col flex-shrink-0 border-r border-slate-200/60 bg-gradient-to-b from-slate-50/80 to-white">
+          <div className="flex border-b border-slate-200/60">
             {[
-              { key: 'friends' as const, label: 'Friends' },
-              { key: 'groups' as const, label: 'Groups' },
-              { key: 'moments' as const, label: 'Moments' },
-              { key: 'requests' as const, label: requests.length > 0 ? `Requests (${requests.length})` : 'Requests' },
+              { key: 'friends' as const, label: '💬 Friends' },
+              { key: 'groups' as const, label: '👥 Groups' },
+              { key: 'moments' as const, label: '🌏 Moments' },
+              { key: 'requests' as const, label: requests.length > 0 ? `📨 Requests (${requests.length})` : '📨 Requests' },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
-                className={`flex-1 py-3 text-xs font-semibold transition-colors ${tab === t.key ? 'text-[#0f1419] border-b-2 border-[#1d9bf0]' : 'text-[#536471] hover:text-[#0f1419] hover:bg-[#f7f9f9]'}`}>
+                className={`flex-1 py-3 text-[11px] font-semibold transition-all duration-200 ${
+                  tab === t.key
+                    ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50/50'
+                    : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                }`}>
                 {t.label}
               </button>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto border-b border-[#eff3f4]">
+          <div className="flex-1 overflow-y-auto border-b border-slate-200/60">
             {tab === 'friends' && (
               <>
-                {friends.length === 0 && <p className="text-[#536471] text-sm p-4 text-center">No friends yet. Add friends below!</p>}
-                {friends.map(f => (
+                {friends.length === 0 && <p className="text-slate-400 text-sm p-6 text-center">No friends yet.<br/><span className="text-xs">Add friends below! 🎉</span></p>}
+                {friends.map(f => { const [c1, c2] = getAvatarColor(f.displayName); return (
                   <button key={f.userId} onClick={() => startDmChat(f)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-b border-[#eff3f4] ${
-                      activeChat?.type === 'dm' && activeChat.friend.userId === f.userId ? 'bg-[#f7f9f9] border-r-2 border-r-[#1d9bf0]' : 'hover:bg-[#f7f9f9]'}`}>
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    className={`w-full flex items-center gap-3 px-4 py-3 transition-all text-left border-b border-slate-100 hover:bg-white/80 ${
+                      activeChat?.type === 'dm' && activeChat.friend.userId === f.userId ? 'bg-white border-r-[3px] border-r-blue-500 shadow-sm' : ''
+                    }`}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
                       {getAvatarLetter(f.displayName)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[#0f1419] text-[15px] font-medium truncate">{f.displayName}</div>
-                      <div className="text-[#536471] text-[13px] font-mono truncate">{f.address.slice(0,6)}...{f.address.slice(-4)}</div>
+                      <div className="text-slate-800 text-[15px] font-medium truncate">{f.displayName}</div>
+                      <div className="text-slate-400 text-[13px] font-mono truncate">{f.address.slice(0,6)}...{f.address.slice(-4)}</div>
                     </div>
                   </button>
-                ))}
+                );})}
               </>
             )}
             {tab === 'groups' && (
               <>
-                {groups.length === 0 && !showCreateGroup && <p className="text-[#536471] text-sm p-4 text-center">No groups yet. Create one below!</p>}
+                {groups.length === 0 && !showCreateGroup && <p className="text-slate-400 text-sm p-6 text-center">No groups yet.<br/><span className="text-xs">Create one below! 👥</span></p>}
                 {groups.map(g => (
                   <button key={g.id} onClick={() => { setMessages([]); stopPolling(); setActiveChat({ type: 'group', group: g }); setRightPanel(null); }}
-                    className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-b border-[#eff3f4] ${activeChat?.type === 'group' && activeChat.group.id === g.id ? 'bg-[#f7f9f9] border-r-2 border-r-[#1d9bf0]' : 'hover:bg-[#f7f9f9]'}`}>
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#00ba7c] flex items-center justify-center text-white text-sm shrink-0">👥</div>
+                    className={`w-full flex items-center gap-3 px-4 py-3 transition-all text-left border-b border-slate-100 hover:bg-white/80 ${activeChat?.type === 'group' && activeChat.group.id === g.id ? 'bg-white border-r-[3px] border-r-emerald-500 shadow-sm' : ''}`}>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-sm shrink-0 shadow-sm">👥</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[#0f1419] text-[15px] font-medium truncate">{g.name}</div>
-                      <div className="text-[#536471] text-[13px]">{g.members?.length || 0} member</div>
+                      <div className="text-slate-800 text-[15px] font-medium truncate">{g.name}</div>
+                      <div className="text-slate-400 text-[13px]">{g.members?.length || 0} member</div>
                     </div>
                   </button>
                 ))}
                 {showCreateGroup && (
                   <div className="px-3 pb-3 space-y-2 mt-2">
                     <input type="text" placeholder="Group name" value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
-                      className="w-full bg-white border border-[#cfd9de] rounded-lg px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" autoFocus />
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" autoFocus />
                     <input type="text" placeholder="Description (optional)" value={newGroupDesc} onChange={e => setNewGroupDesc(e.target.value)}
-                      className="w-full bg-white border border-[#cfd9de] rounded-lg px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" />
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" />
                     <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
-                      className="w-full bg-[#1d9bf0] text-white font-bold text-sm py-2 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Create Group</button>
+                      className="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-sm py-2.5 rounded-full hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 shadow-sm transition-all">Create Group</button>
                   </div>
                 )}
               </>
             )}
             {tab === 'moments' && (
               <div className="px-3 py-3 space-y-3">
-                <div className="space-y-2">
-                  <textarea placeholder="What's on your mind?" value={newMoment} onChange={e => setNewMoment(e.target.value)}
+                <div className="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 space-y-2">
+                  <textarea placeholder="What's on your mind? 🌟" value={newMoment} onChange={e => setNewMoment(e.target.value)}
                     rows={3}
-                    className="w-full bg-white border border-[#cfd9de] rounded-xl px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0] resize-none" />
+                    className="w-full bg-transparent border-none rounded-xl px-1 py-1 text-sm text-slate-800 placeholder-slate-400 outline-none resize-none" />
                   <div className="flex justify-between items-center">
-                    <span className="text-[#536471] text-xs">{newMoment.length}/280</span>
+                    <span className={`text-xs ${newMoment.length > 260 ? 'text-orange-500' : 'text-slate-400'}`}>{newMoment.length}/280</span>
                     <div className="flex gap-2 items-center">
-                      <label className="text-[#1d9bf0] text-xs bg-[#1d9bf0]/5 hover:bg-[#1d9bf0]/10 px-3 py-1 rounded-full cursor-pointer font-semibold">
+                      <label className="text-blue-500 text-xs bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full cursor-pointer font-semibold transition-colors">
                         🖼️ Photo
                         <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
                           const file = e.target.files?.[0];
@@ -443,7 +456,6 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                       </label>
                       <button onClick={async () => {
                         if (!newMoment.trim()) return;
-                        // Upload content to IPFS first, then store CID reference in DB
                         try {
                           setPostingMoment(true);
                           const content = newMoment.trim();
@@ -451,74 +463,85 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                           const r = await fetch('/api/ipfs/upload', { method: 'POST', headers: { ...authStore.headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: 'moment.txt', data: base64, mimeType: 'text/plain;charset=utf-8' }) });
                           if (!r.ok) throw new Error('IPFS upload failed');
                           const { cid } = await r.json();
-                          // Store CID reference in DB
                           const mr = await fetch('/api/moments', { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ content: `ipfs://${cid}` }) });
                           if (mr.ok) { const d = await mr.json(); setMoments(prev => [d.moment, ...prev]); setNewMoment(''); }
                         } catch (e) { console.error('post moment error', e); }
                         setPostingMoment(false);
                       }} disabled={!newMoment.trim() || postingMoment}
-                        className="bg-[#1d9bf0] text-white font-bold text-sm px-4 py-1.5 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Post</button>
+                        className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold text-sm px-5 py-1.5 rounded-full hover:from-blue-600 hover:to-indigo-600 disabled:opacity-50 shadow-sm transition-all">Post</button>
                     </div>
                   </div>
                 </div>
-                {moments.length === 0 && <p className="text-[#536471] text-sm text-center py-6">No moments yet. Share something!</p>}
+                {moments.length === 0 && (
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-3">🌏</div>
+                    <p className="text-slate-400 text-sm">No moments yet. Share something!</p>
+                  </div>
+                )}
                 {moments.map((m: any, i: number) => (
-                  <div key={m.id || i} className="border-b border-[#eff3f4] pb-3">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold shrink-0">{getAvatarLetter(m.authorAddr || m.userId)}</div>
-                      <div className="flex-1 min-w-0"><span className="text-[#0f1419] text-sm font-semibold">{m.authorName || 'User'}</span><span className="text-[#536471] text-xs ml-2">{m.time || ''}</span></div>
+                  <div key={m.id || i} className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100">
+                    <div className="flex items-center gap-2 mb-2">
+                      {(() => { const [c1,c2] = getAvatarColor(m.authorAddr || m.userId || '?'); return (
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>{getAvatarLetter(m.authorAddr || m.userId || '?')}</div>
+                      );})()}
+                      <div className="flex-1 min-w-0"><span className="text-slate-800 text-sm font-semibold">{m.authorName || 'User'}</span><span className="text-slate-400 text-xs ml-2">{m.time || ''}</span></div>
                     </div>
-                    <p className="text-[#0f1419] text-sm pl-9">
+                    <div className="text-slate-700 text-sm pl-10">
                       {m.content?.startsWith('ipfs://')
                         ? <IpfsMomentContent cid={m.content.replace('ipfs://', '')} />
                         : m.content}
-                    </p>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
             {tab === 'requests' && (
               <>
-                {requests.length === 0 && <p className="text-[#536471] text-sm p-4 text-center">No pending friend requests.</p>}
-                {requests.map(r => (
-                  <div key={r.id} className="px-4 py-3 border-b border-[#eff3f4]">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold">
+                {requests.length === 0 && (
+                  <div className="text-center py-8">
+                    <div className="text-4xl mb-3">📨</div>
+                    <p className="text-slate-400 text-sm">No pending friend requests.</p>
+                  </div>
+                )}
+                {requests.map(r => { const [c1,c2] = getAvatarColor(r.displayName || r.address); return (
+                  <div key={r.id} className="px-4 py-3 border-b border-slate-100 bg-white/60">
+                    <div className="flex items-center gap-2 mb-2.5">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
                         {getAvatarLetter(r.displayName)}
                       </div>
                       <div className="min-w-0">
-                        <div className="text-[#0f1419] text-sm truncate">{r.displayName}</div>
-                        <div className="text-[#536471] text-xs font-mono">{r.address.slice(0,6)}...{r.address.slice(-4)}</div>
+                        <div className="text-slate-800 text-sm font-medium truncate">{r.displayName}</div>
+                        <div className="text-slate-400 text-xs font-mono">{r.address.slice(0,6)}...{r.address.slice(-4)}</div>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => handleAccept(r.id)} className="bg-[#1d9bf0] text-white font-bold text-xs px-4 py-1.5 rounded-full">Accept</button>
-                      <button onClick={() => handleRemove(r.address)} className="text-[#536471] border border-[#cfd9de] font-bold text-xs px-4 py-1.5 rounded-full">Decline</button>
+                      <button onClick={() => handleAccept(r.id)} className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-xs px-4 py-1.5 rounded-full hover:from-blue-600 hover:to-blue-700 shadow-sm transition-all">Accept</button>
+                      <button onClick={() => handleRemove(r.address)} className="text-slate-500 border border-slate-200 bg-white font-bold text-xs px-4 py-1.5 rounded-full hover:bg-slate-50 transition-colors">Decline</button>
                     </div>
                   </div>
-                ))}
+                );})}
               </>
             )}
           </div>
 
-          {/* Bottom actions — tabs show different actions */}
-          <div className="border-t border-[#eff3f4] p-3 space-y-1.5">
+          {/* Bottom actions */}
+          <div className="border-t border-slate-200/60 p-3 space-y-1.5 bg-white/60">
             {tab === 'groups' && (
               <>
                 {!showCreateGroup ? (
                   <>
                     <button onClick={() => setShowCreateGroup(true)}
-                      className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-white bg-[#0f1419] hover:bg-[#272c30] transition-colors">
+                      className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 shadow-sm transition-all">
                       + Create Group
                     </button>
                     <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
-                      className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
+                      className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
                       + Join Group
                     </button>
                   </>
                 ) : (
                   <button onClick={() => setShowCreateGroup(false)}
-                    className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#536471] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
+                    className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-slate-500 border border-slate-200 hover:bg-slate-50 transition-colors">
                     Cancel
                   </button>
                 )}
@@ -526,68 +549,76 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
             )}
             {tab === 'friends' && (
               <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
-                className={`w-full text-left px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
-                  rightPanel === 'add_friend' ? 'bg-[#1d9bf0]/10 text-[#1d9bf0]' : 'text-white bg-[#0f1419] hover:bg-[#272c30]'
+                className={`w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold transition-all shadow-sm ${
+                  rightPanel === 'add_friend'
+                    ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                    : 'text-white bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900'
                 }`}>
                 + Add Friend
               </button>
             )}
             {tab === 'requests' && (
               <button onClick={() => setTab('friends')}
-                className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
+                className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
                 ← Back to Friends
               </button>
             )}
             <button onClick={onGoProfile}
-              className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                {getAvatarLetter(user.displayName || user.address)}
-              </span>
+              className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-all flex items-center gap-2">
+              {(() => { const [c1,c2] = getAvatarColor(user.displayName || user.address); return (
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
+                  {getAvatarLetter(user.displayName || user.address)}
+                </span>
+              );})()}
               My Profile
             </button>
           </div>
         </aside>
 
         {/* CENTER CHAT AREA */}
-        <main className="flex-1 flex flex-col bg-white min-w-0">
+        <main className="flex-1 flex flex-col min-w-0 bg-[#f0f2f5]">
           {activeChat ? (
             <>
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-[#eff3f4] bg-white">
+              <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200/60 bg-white/90 backdrop-blur-sm shadow-sm">
                 {activeChat.type === 'dm' ? (
                   <>
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-sm">
-                      {getAvatarLetter(activeChat.friend.displayName)}
-                    </div>
+                    {(() => { const [c1,c2] = getAvatarColor(activeChat.friend.displayName); return (
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
+                        {getAvatarLetter(activeChat.friend.displayName)}
+                      </div>
+                    );})()}
                     <div className="flex-1 min-w-0">
-                      <div className="text-[#0f1419] font-semibold text-[15px]">{activeChat.friend.displayName}</div>
-                      <div className="text-[#536471] text-[13px] font-mono truncate">{activeChat.friend.address.slice(0,8)}...{activeChat.friend.address.slice(-6)}</div>
+                      <div className="text-slate-800 font-semibold text-[15px]">{activeChat.friend.displayName}</div>
+                      <div className="text-slate-400 text-[13px] font-mono truncate">{activeChat.friend.address.slice(0,8)}...{activeChat.friend.address.slice(-6)}</div>
                     </div>
-                    {/* Lock indicator */}
                     {(() => {
                       const sk = sharedKeysRef.current.get(activeChat.friend.address.toLowerCase());
                       return sk
-                        ? <span className="text-[#00ba7c] text-xs bg-[#00ba7c]/10 px-2 py-0.5 rounded-full ml-auto">🔐 E2EE</span>
-                        : <span className="text-[#ffd400] text-xs bg-[#ffd400]/10 px-2 py-0.5 rounded-full ml-auto">⚠ Plaintext</span>;
+                        ? <span className="text-emerald-600 text-xs bg-emerald-50 px-2.5 py-0.5 rounded-full ml-auto border border-emerald-200/50 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>🔐 E2EE</span>
+                        : <span className="text-amber-600 text-xs bg-amber-50 px-2.5 py-0.5 rounded-full ml-auto border border-amber-200/50 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400"/>⚠ Plaintext</span>;
                     })()}
                   </>
                 ) : (
                   <>
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#00ba7c] flex items-center justify-center text-white text-sm">👥</div>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-sm shadow-sm">👥</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-[#0f1419] font-semibold text-[15px]">{activeChat.group.name}</div>
-                      <div className="text-[#536471] text-[13px]">{activeChat.group.members?.length || 0} members</div>
+                      <div className="text-slate-800 font-semibold text-[15px]">{activeChat.group.name}</div>
+                      <div className="text-slate-400 text-[13px]">{activeChat.group.members?.length || 0} members</div>
                     </div>
                   </>
                 )}
                 <button onClick={() => setRightPanel(rightPanel === 'info' ? null : 'info')}
-                  className="text-[#536471] hover:text-[#0f1419] text-sm font-semibold">Info</button>
+                  className="text-slate-500 hover:text-slate-700 text-sm font-semibold hover:bg-slate-100 px-3 py-1.5 rounded-full transition-colors">Info</button>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-white">
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3 bg-[#f0f2f5]">
                 {messages.length === 0 && (
-                  <p className="text-[#536471] text-sm text-center py-8">
-                    {cryptoReady ? '🔐 E2EE ready — send a message to start.' : 'Send a message to start the conversation.'}
-                  </p>
+                  <div className="text-center py-12">
+                    <div className="text-5xl mb-4">🔐</div>
+                    <p className="text-slate-400 text-sm">
+                      {cryptoReady ? 'E2EE ready — send an encrypted message to start.' : 'Send a message to start the conversation.'}
+                    </p>
+                  </div>
                 )}
                 {messages.map((msg, i) => {
                   const txMsg = (activeChat.type === 'dm') ? decodeTxMessage(msg.content || '') : null;
@@ -595,9 +626,13 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                   return (
                     <div key={msg.id || i} className={`flex ${isSent ? 'justify-end' : 'justify-start'}`}>
                       {txMsg ? (
-                        <TransferCard msg={txMsg} isSent={isSent} />
+                        <TransferCard payload={txMsg.payload} isSent={isSent} />
                       ) : (
-                        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-[15px] ${isSent ? 'bg-[#1d9bf0] text-white rounded-br-md' : 'bg-[#f7f9f9] text-[#0f1419] rounded-bl-md border border-[#eff3f4]'}`}>
+                        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-[15px] leading-relaxed ${
+                          isSent
+                            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-br-md shadow-md shadow-blue-500/20'
+                            : 'bg-white text-slate-800 rounded-bl-md shadow-sm border border-slate-100'
+                        }`}>
                           {msg.content}
                         </div>
                       )}
@@ -606,22 +641,20 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                 })}
               </div>
 
-              <div className="border-t border-[#eff3f4] p-3 bg-white">
-                {/* Action buttons */}
+              <div className="border-t border-slate-200/60 p-3 bg-white/90 backdrop-blur-sm">
                 <div className="flex gap-2 mb-2">
                   <button
                     onClick={() => { setShowTransfer(true); }}
-                    className="text-[#f4212e] text-xs bg-[#f4212e]/5 hover:bg-[#f4212e]/10 px-3 py-1 rounded-full transition-colors font-semibold"
+                    className="text-red-500 text-xs bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full transition-colors font-semibold border border-red-200/50"
                     title="Send Red Packet"
                   >🧧 Red Packet</button>
-                  <label className="text-[#1d9bf0] text-xs bg-[#1d9bf0]/5 hover:bg-[#1d9bf0]/10 px-3 py-1 rounded-full transition-colors font-semibold cursor-pointer" title="Upload file via IPFS">
+                  <label className="text-blue-500 text-xs bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors font-semibold cursor-pointer border border-blue-200/50" title="Upload file via IPFS">
                     📎 File
                     <input type="file" className="hidden" onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       try {
                         setComposing(prev => prev + `\n[Uploading: ${file.name}...]`);
-                        // Read file as base64
                         const buf = await file.arrayBuffer();
                         const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
                         const r = await fetch('/api/ipfs/upload', {
@@ -642,7 +675,6 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                     }} />
                   </label>
                 </div>
-                {/* Transfer form */}
                 {showTransfer && (
                   <div className="mb-2">
                     <TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} />
@@ -651,75 +683,90 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                 <div className="flex gap-2 items-end">
                   <input type="text" value={composing} onChange={e => setComposing(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && composing.trim() && !showTransfer) { sendDm(); } }}
-                    placeholder="Start a new message"
-                    className="flex-1 bg-transparent border-none outline-none text-[#0f1419] text-[15px] placeholder-[#536471] py-2" />
+                    placeholder="Type a message..."
+                    className="flex-1 bg-slate-100 border-none outline-none text-slate-800 text-[15px] placeholder-slate-400 py-2.5 px-3 rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-100 transition-all" />
                   <button onClick={sendDm} disabled={!composing.trim()}
-                    className="bg-[#1d9bf0] text-white font-bold text-sm px-5 py-2 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50 shrink-0">Send</button>
+                    className="bg-gradient-to-r from-blue-500 to-blue-600 text-white font-bold text-sm px-5 py-2.5 rounded-full hover:from-blue-600 hover:to-blue-700 disabled:opacity-50 shrink-0 shadow-md shadow-blue-500/25 transition-all">
+                    Send
+                  </button>
                 </div>
               </div>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white">
-              <div className="text-5xl mb-4">💬</div>
-              <h3 className="text-[#0f1419] text-xl font-bold mb-2">CryptChat</h3>
-              <p className="text-[#536471] text-[15px]">Web3 Encrypted Messaging</p>
-              <p className="text-[#536471] text-sm mt-1">
-                {cryptoReady ? '🔐 ECDH + AES-256-GCM end-to-end encryption' : 'Setting up encryption...'}
-              </p>
+            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#f0f2f5]">
+              <div className="relative mb-6">
+                <div className="text-7xl">💬</div>
+                <div className="absolute -bottom-2 -right-2 text-4xl">🔐</div>
+              </div>
+              <h3 className="text-slate-800 text-2xl font-bold mb-2 tracking-tight">Welcome to CryptChat</h3>
+              <p className="text-slate-500 text-[15px] mb-6">Web3 Encrypted Messaging</p>
+              {cryptoReady ? (
+                <div className="flex items-center gap-2 text-emerald-600 text-sm bg-emerald-50 px-4 py-2 rounded-full border border-emerald-200/50">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"/>
+                  ECDH + AES-256-GCM End-to-End Encryption Active
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-amber-600 text-sm bg-amber-50 px-4 py-2 rounded-full border border-amber-200/50">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"/>
+                  Setting up encryption...
+                </div>
+              )}
             </div>
           )}
         </main>
 
         {/* RIGHT PANEL */}
         {rightPanel && (
-          <aside className="w-80 border-l border-[#eff3f4] bg-white overflow-y-auto flex-shrink-0 p-4 space-y-4">
+          <aside className="w-80 border-l border-slate-200/60 bg-white overflow-y-auto flex-shrink-0 p-5 space-y-4 shadow-lg">
             <div className="flex items-center justify-between">
-              <h3 className="text-[#0f1419] font-bold text-lg">
+              <h3 className="text-slate-800 font-bold text-lg">
                 {rightPanel === 'add_friend' ? 'Add Friend' : 'Conversation Info'}
               </h3>
-              <button onClick={() => setRightPanel(null)} className="text-[#536471] hover:text-[#0f1419] text-lg">✕</button>
+              <button onClick={() => setRightPanel(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 w-8 h-8 rounded-full flex items-center justify-center transition-colors">✕</button>
             </div>
 
             {rightPanel === 'add_friend' && (
               <div className="space-y-3">
-                <p className="text-[#536471] text-sm">Search by wallet address or name</p>
+                <p className="text-slate-500 text-sm">Search by wallet address or name</p>
                 <input type="text" placeholder="0x... or username" value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
-                  className="w-full bg-white border border-[#cfd9de] rounded-lg px-3 py-2.5 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" autoFocus />
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" autoFocus />
                 {searchedUsers.length > 0 && (
-                  <div className="space-y-1 border border-[#eff3f4] rounded-lg max-h-48 overflow-y-auto">
-                    {searchedUsers.map((u: any) => (
+                  <div className="space-y-1 border border-slate-100 rounded-xl max-h-48 overflow-y-auto bg-slate-50/50">
+                    {searchedUsers.map((u: any) => { const [c1,c2] = getAvatarColor(u.displayName || u.address); return (
                       <button key={u.id} onClick={() => setAddFriendAddr(u.address)}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#f7f9f9] transition-colors text-left">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold">
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white transition-colors text-left">
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
                           {getAvatarLetter(u.displayName || u.address)}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[#0f1419] text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
-                          <div className="text-[#536471] text-xs font-mono truncate">{u.address}</div>
+                          <div className="text-slate-800 text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
+                          <div className="text-slate-400 text-xs font-mono truncate">{u.address}</div>
                         </div>
                       </button>
-                    ))}
+                    );})}
                   </div>
                 )}
-                <button onClick={handleAddFriend} className="w-full bg-[#0f1419] text-white font-bold text-sm py-2.5 rounded-full hover:bg-[#272c30]">
+                <button onClick={handleAddFriend} className="w-full bg-gradient-to-r from-slate-700 to-slate-800 text-white font-bold text-sm py-2.5 rounded-full hover:from-slate-800 hover:to-slate-900 shadow-sm transition-all">
                   Send Friend Request
                 </button>
-                {addFriendMsg && <p className="text-[#00ba7c] text-sm">{addFriendMsg}</p>}
-                {addFriendErr && <p className="text-[#f4212e] text-sm">{addFriendErr}</p>}
+                {addFriendMsg && <p className="text-emerald-600 text-sm bg-emerald-50 px-3 py-2 rounded-xl">{addFriendMsg}</p>}
+                {addFriendErr && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-xl">{addFriendErr}</p>}
               </div>
             )}
 
             {rightPanel === 'info' && activeChat && activeChat.type === 'dm' && (
               <div className="space-y-4 text-center">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-2xl mx-auto">
-                  {getAvatarLetter(activeChat.friend.displayName)}
-                </div>
+                {(() => { const [c1,c2] = getAvatarColor(activeChat.friend.displayName); return (
+                  <div className="w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-3xl mx-auto shadow-lg" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
+                    {getAvatarLetter(activeChat.friend.displayName)}
+                  </div>
+                );})()}
                 <div>
-                  <div className="text-[#0f1419] text-lg font-bold">{activeChat.friend.displayName}</div>
-                  <div className="text-[#536471] text-sm font-mono break-all mt-1">{activeChat.friend.address}</div>
+                  <div className="text-slate-800 text-xl font-bold">{activeChat.friend.displayName}</div>
+                  <div className="text-slate-500 text-sm font-mono break-all mt-1 bg-slate-50 rounded-lg p-2">{activeChat.friend.address}</div>
                 </div>
                 <button onClick={() => handleRemove(activeChat.friend.address)}
-                  className="w-full border border-[#f4212e]/30 text-[#f4212e] font-bold text-sm py-2 rounded-full hover:bg-[#f4212e]/5">
+                  className="w-full border border-red-200 text-red-500 font-bold text-sm py-2.5 rounded-full hover:bg-red-50 transition-colors">
                   Remove Friend
                 </button>
               </div>
@@ -728,22 +775,22 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
             {rightPanel === 'info' && activeChat && activeChat.type === 'group' && (
               <div className="space-y-4">
                 <div className="text-center">
-                  <div className="text-4xl mb-2">👥</div>
-                  <div className="text-[#0f1419] text-lg font-bold">{activeChat.group.name}</div>
-                  {activeChat.group.description && <div className="text-[#536471] text-sm mt-1">{activeChat.group.description}</div>}
+                  <div className="text-5xl mb-3">👥</div>
+                  <div className="text-slate-800 text-xl font-bold">{activeChat.group.name}</div>
+                  {activeChat.group.description && <div className="text-slate-500 text-sm mt-1">{activeChat.group.description}</div>}
                 </div>
-                <p className="text-[#536471] text-xs uppercase tracking-wider">Members ({activeChat.group.members?.length || 0})</p>
-                {activeChat.group.members?.map((m: any) => (
-                  <div key={m.userId} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#f7f9f9] transition-colors">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-sm font-bold">
-                      {getAvatarLetter(m.user?.displayName || m.user?.address)}
+                <p className="text-slate-400 text-xs uppercase tracking-wider font-semibold">Members ({activeChat.group.members?.length || 0})</p>
+                {activeChat.group.members?.map((m: any) => { const [c1,c2] = getAvatarColor(m.user?.displayName || m.user?.address || '?'); return (
+                  <div key={m.userId} className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-slate-50 transition-colors">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
+                      {getAvatarLetter(m.user?.displayName || m.user?.address || '?')}
                     </div>
                     <div className="flex-1">
-                      <div className="text-[#0f1419] text-sm">{m.user?.displayName || m.user?.address?.slice(0,6)+'...'+m.user?.address?.slice(-4)}</div>
-                      <div className="text-[#536471] text-xs capitalize">{m.role}</div>
+                      <div className="text-slate-800 text-sm font-medium">{m.user?.displayName || m.user?.address?.slice(0,6)+'...'+m.user?.address?.slice(-4)}</div>
+                      <div className="text-slate-400 text-xs capitalize">{m.role}</div>
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             )}
           </aside>

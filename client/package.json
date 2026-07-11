@@ -10,10 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.101.2",
     "@xmtp/browser-sdk": "^7.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "viem": "^2.55.0"
+    "viem": "^2.55.0",
+    "wagmi": "3.7.1"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.2",

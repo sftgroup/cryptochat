@@ -1,19 +1,42 @@
 import { useState } from 'react';
+import { useWriteContract, useChainId, useSwitchChain } from 'wagmi';
 import { ethers } from 'ethers';
-import type { TxMessage, TransferPayload } from '../lib/tx';
+import type { TransferPayload } from '../lib/tx';
 import { getChainConfig, formatAmount, formatAddress } from '../lib/tx';
 
+const ERC20_ABI = [
+  {
+    type: 'function',
+    name: 'transfer',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [{ type: 'bool' }],
+    stateMutability: 'nonpayable',
+  },
+] as const;
+
 interface Props {
-  msg: TxMessage;
+  payload: TransferPayload;
   isSent: boolean;
 }
 
-export default function TransferCard({ msg, isSent }: Props) {
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
+export default function TransferCard({ payload, isSent }: Props) {
   const [executing, setExecuting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { payload, from } = msg;
+  const { writeContractAsync } = useWriteContract();
+  const chainId = useChainId();
+  const { switchChainAsync } = useSwitchChain();
+
   const chain = getChainConfig(payload.chainId);
   const amountDisplay = formatAmount(payload.amount);
   const symbol = payload.tokenSymbol || chain?.symbol || 'ETH';
@@ -23,40 +46,42 @@ export default function TransferCard({ msg, isSent }: Props) {
     setExecuting(true);
     setError(null);
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const chainId = payload.chainId;
-      const network = await provider.getNetwork();
+      const targetChainId = payload.chainId;
 
-      if (network.chainId !== BigInt(chainId)) {
+      // Switch chain if needed
+      if (chainId !== targetChainId) {
         try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x' + chainId.toString(16) }],
-          });
+          await switchChainAsync({ chainId: targetChainId as 11155111 });
         } catch {
-          const c = getChainConfig(chainId);
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x' + chainId.toString(16),
-              chainName: c?.name || 'Unknown',
-              rpcUrls: [c?.rpc || ''],
-              nativeCurrency: { name: c?.symbol || 'ETH', symbol: c?.symbol || 'ETH', decimals: 18 },
-            }],
-          });
+          // ignore — try anyway
         }
       }
 
-      let tx;
+      let hash: string;
+
       if (payload.tokenAddress) {
-        const iface = new ethers.Interface(['function transfer(address to, uint256 amount)']);
-        const data = iface.encodeFunctionData('transfer', [payload.to, payload.amount]);
-        tx = await signer.sendTransaction({ to: payload.tokenAddress, data, chainId });
+        // ERC20 transfer via wagmi writeContract
+        hash = await writeContractAsync({
+          address: payload.tokenAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: 'transfer',
+          args: [payload.to as `0x${string}`, BigInt(payload.amount)],
+          chainId: 11155111,
+        });
       } else {
-        tx = await signer.sendTransaction({ to: payload.to, value: payload.amount, chainId });
+        // Native ETH — use wallet provider via ethers (simplest)
+        const provider = window.ethereum;
+        if (!provider) throw new Error('No wallet provider');
+        const ethProvider = new ethers.BrowserProvider(provider);
+        const signer = await ethProvider.getSigner();
+        const tx = await signer.sendTransaction({
+          to: payload.to,
+          value: payload.amount,
+        });
+        hash = tx.hash;
       }
-      setTxHash(tx.hash);
+
+      setTxHash(hash);
     } catch (err: any) {
       setError(err?.message?.slice(0, 100) || 'Transaction failed');
     } finally {

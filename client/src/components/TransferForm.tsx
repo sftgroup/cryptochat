@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ethers } from 'ethers';
+import { useAccount, useBalance } from 'wagmi';
 import type { TransferPayload } from '../lib/tx';
 import { SUPPORTED_CHAINS, getChainConfig, formatAmount } from '../lib/tx';
 
@@ -16,57 +17,25 @@ export default function TransferForm({ onSend, onCancel }: Props) {
   const [tokenSymbol, setTokenSymbol] = useState('');
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [balance, setBalance] = useState('');
 
+  const { address } = useAccount();
+  const { data: balanceData } = useBalance({ address });
   const chain = getChainConfig(chainId);
 
-  useEffect(() => {
-    loadBalance();
-  }, [chainId]);
-
-  async function loadBalance() {
-    try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const bal = await provider.getBalance(signer.address);
-      setBalance(formatAmount(bal.toString()));
-    } catch {}
-  }
+  const balance = balanceData
+    ? formatAmount(balanceData.value.toString())
+    : '';
 
   async function handleSend() {
     if (!to || !amount || !ethers.isAddress(to)) return;
     setSending(true);
     try {
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const chain = getChainConfig(chainId);
-      const expectedChainId = chain?.id || 56;
-
-      const network = await provider.getNetwork();
-      if (network.chainId !== BigInt(expectedChainId)) {
-        try {
-          await window.ethereum.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: '0x' + expectedChainId.toString(16) }],
-          });
-        } catch {
-          await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: '0x' + expectedChainId.toString(16),
-              chainName: chain?.name || 'Unknown',
-              rpcUrls: [chain?.rpc || ''],
-              nativeCurrency: { name: chain?.symbol || 'ETH', symbol: chain?.symbol || 'ETH', decimals: 18 },
-            }],
-          });
-        }
-      }
-
       const amountWei = ethers.parseUnits(amount, 18).toString();
       const payload: TransferPayload = {
         type: 'transfer',
         to,
         amount: amountWei,
-        chainId: expectedChainId,
+        chainId: chain?.id || 56,
         tokenAddress: tokenAddress || undefined,
         tokenSymbol: tokenSymbol || chain?.symbol || 'ETH',
         message: message || undefined,

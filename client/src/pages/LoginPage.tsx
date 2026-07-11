@@ -1,45 +1,52 @@
 import { useState, useEffect } from 'react';
+import { useConnect, useAccount, useSignMessage } from 'wagmi';
 import { getNonce, login } from '../lib/api';
 
 interface Props { onLogin: () => void; }
 
 export default function LoginPage({ onLogin }: Props) {
+  const { connectors, connect, isPending } = useConnect();
+  const { isConnected, address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [hasMetamask, setHasMetamask] = useState(false);
+  const [hasMetaMask, setHasMetaMask] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setHasMetamask(!!(window as any).ethereum);
+    setHasMetaMask(!!(window as any).ethereum);
     setReady(true);
   }, []);
 
-  async function connect() {
+  // If wallet already connected, sign and login
+  useEffect(() => {
+    if (!isConnected || !address || loading) return;
+    (async () => {
+      setLoading(true);
+      try {
+        const nonce = await getNonce(address);
+        const signature = await signMessageAsync({ message: nonce });
+        await login(address, signature);
+        onLogin();
+      } catch (err: any) {
+        if (err?.code === 'ACTION_REJECTED' || err?.code === 4001) {
+          setError('You rejected the signature request.');
+        } else {
+          setError(err?.message?.slice(0, 120) || 'Login failed');
+        }
+      }
+      setLoading(false);
+    })();
+  }, [isConnected, address]);
+
+  async function handleConnect() {
     setError('');
-    setLoading(true);
-    try {
-      if (!(window as any).ethereum) {
-        setHasMetamask(false);
-        setLoading(false);
-        return;
-      }
-      const { ethers } = await import('ethers');
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      await provider.send('eth_requestAccounts', []);
-      const signer = await provider.getSigner();
-      const address = await signer.getAddress();
-      const nonce = await getNonce(address);
-      const signature = await signer.signMessage(nonce);
-      await login(address, signature);
-      onLogin();
-    } catch (err: any) {
-      if (err?.code === 'ACTION_REJECTED' || err?.code === 4001) {
-        setError('You rejected the signature request.');
-      } else {
-        setError(err?.message?.slice(0, 120) || 'Connection failed');
-      }
+    const injectedConnector = connectors.find(c => c.id === 'injected' || c.type === 'injected');
+    if (!injectedConnector) {
+      setHasMetaMask(false);
+      return;
     }
-    setLoading(false);
+    connect({ connector: injectedConnector });
   }
 
   if (!ready) {
@@ -53,16 +60,16 @@ export default function LoginPage({ onLogin }: Props) {
     );
   }
 
+  const isConnecting = loading || isPending;
+
   return (
     <div style={{minHeight:'100vh',display:'flex',fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'}}>
       {/* Left — Brand / Hero Panel */}
       <div style={{flex:1,background:'#0f1419',display:'flex',alignItems:'center',justifyContent:'center',padding:60,position:'relative',overflow:'hidden',minHeight:'100vh'}}>
-        {/* Decorative elements */}
         <div style={{position:'absolute',top:'-20%',right:'-20%',width:'60%',height:'60%',borderRadius:'50%',background:'radial-gradient(circle,rgba(29,155,240,0.15),transparent 70%)',pointerEvents:'none'}} />
         <div style={{position:'absolute',bottom:'-10%',left:'-10%',width:'40%',height:'40%',borderRadius:'50%',background:'radial-gradient(circle,rgba(120,86,255,0.12),transparent 70%)',pointerEvents:'none'}} />
         
         <div style={{position:'relative',maxWidth:480,width:'100%'}}>
-          {/* Logo */}
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:40}}>
             <div style={{width:56,height:56,borderRadius:16,background:'linear-gradient(135deg,#1d9bf0,#7856ff)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28}}>🔒</div>
             <div>
@@ -71,7 +78,6 @@ export default function LoginPage({ onLogin }: Props) {
             </div>
           </div>
 
-          {/* Value props */}
           <div style={{display:'flex',flexDirection:'column',gap:20,marginBottom:48}}>
             {[
               { icon:'🔐', title:'End-to-End Encrypted', desc:'ECDH + AES-256-GCM. Zero-knowledge architecture.' },
@@ -88,7 +94,6 @@ export default function LoginPage({ onLogin }: Props) {
             ))}
           </div>
 
-          {/* Testimonial / tagline */}
           <div style={{borderTop:'1px solid rgba(255,255,255,0.08)',paddingTop:24}}>
             <div style={{color:'#fff',fontSize:15,fontStyle:'italic',marginBottom:8}}>
               "Finally, a Web3 messenger that actually works. ECDH encryption without the XMTP headaches."
@@ -101,41 +106,38 @@ export default function LoginPage({ onLogin }: Props) {
       {/* Right — Login Panel */}
       <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:60,background:'#fff',minHeight:'100vh'}}>
         <div style={{maxWidth:400,width:'100%'}}>
-          {/* Welcome text */}
           <div style={{marginBottom:8}}>
             <div style={{fontSize:12,fontWeight:700,color:'#1d9bf0',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:8}}>Get Started</div>
             <h2 style={{fontSize:30,fontWeight:900,color:'#0f1419',letterSpacing:'-0.02em',lineHeight:1.2,marginBottom:8}}>Welcome back</h2>
             <p style={{fontSize:15,color:'#536471',lineHeight:1.5}}>Connect your wallet to access encrypted messages with your friends.</p>
           </div>
 
-          {/* Divider */}
           <div style={{display:'flex',alignItems:'center',gap:12,margin:'32px 0'}}>
             <div style={{flex:1,height:1,background:'#eff3f4'}} />
             <span style={{fontSize:12,color:'#8b98a5',fontWeight:500}}>WALLET LOGIN</span>
             <div style={{flex:1,height:1,background:'#eff3f4'}} />
           </div>
 
-          {/* Connect button */}
           <button
-            onClick={connect}
-            disabled={loading}
+            onClick={handleConnect}
+            disabled={isConnecting}
             style={{
               width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:12,
-              padding:'16px 24px',borderRadius:16,border:'none',cursor:loading?'not-allowed':'pointer',
-              background:loading?'#1a8cd8':'linear-gradient(135deg,#1d9bf0,#7856ff)',
+              padding:'16px 24px',borderRadius:16,border:'none',cursor:isConnecting?'not-allowed':'pointer',
+              background:isConnecting?'#1a8cd8':'linear-gradient(135deg,#1d9bf0,#7856ff)',
               color:'#fff',fontSize:16,fontWeight:700,
               boxShadow:'0 4px 20px rgba(29,155,240,0.25)',
-              transition:'all 0.3s',opacity:loading?0.8:1,
+              transition:'all 0.3s',opacity:isConnecting?0.8:1,
             }}
-            onMouseEnter={e => { if(!loading) { e.currentTarget.style.boxShadow = '0 8px 30px rgba(29,155,240,0.35)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}}
+            onMouseEnter={e => { if(!isConnecting) { e.currentTarget.style.boxShadow = '0 8px 30px rgba(29,155,240,0.35)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}}
             onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 20px rgba(29,155,240,0.25)'; e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            {loading ? (
+            {isConnecting ? (
               <>
                 <span style={{width:20,height:20,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',display:'inline-block',animation:'spin 0.7s linear infinite'}} />
                 Signing in...
               </>
-            ) : hasMetamask ? (
+            ) : hasMetaMask ? (
               <>
                 <svg width="22" height="22" viewBox="0 0 28 28" fill="none"><path d="M25.5 2L15.7 9.2l1.8-4.4L25.5 2z" fill="#fff" opacity="0.85"/><path d="M2.5 2l9.7 7.3-1.7-4.5L2.5 2z" fill="#fff" opacity="0.85"/><path d="M21.8 18.5l-2.9 4.5 6.2 1.7 1.8-6L21.8 18.5z" fill="#fff" opacity="0.85"/><path d="M6.2 18.5l-5.1.2 1.8 6 6.2-1.7-2.9-4.5z" fill="#fff" opacity="0.85"/><path d="M12.3 20l-1.6 4.7 5.8.3L15.7 20l-.8-7.3h-1.8l-.8 7.3z" fill="#fff" opacity="0.85"/><path d="M8 11.8l-3.5 5.2 2.2-1.3 2.7-2.3L8 11.8z" fill="#fff" opacity="0.7"/><path d="M20 11.8l-1.4 1.6 2.7 2.3 2.2 1.3-3.5-5.2z" fill="#fff" opacity="0.7"/></svg>
                 Connect MetaMask
@@ -151,7 +153,7 @@ export default function LoginPage({ onLogin }: Props) {
             </div>
           )}
 
-          {!hasMetamask && (
+          {!hasMetaMask && (
             <div style={{marginTop:20,padding:'16px',background:'#f7f9f9',border:'1px solid #eff3f4',borderRadius:12,textAlign:'center'}}>
               <div style={{fontSize:14,fontWeight:600,color:'#0f1419',marginBottom:6}}>No wallet detected</div>
               <p style={{fontSize:13,color:'#536471',marginBottom:12,lineHeight:1.5}}>
@@ -164,7 +166,6 @@ export default function LoginPage({ onLogin }: Props) {
             </div>
           )}
 
-          {/* Footer */}
           <div style={{marginTop:40,textAlign:'center'}}>
             <div style={{fontSize:12,color:'#8b98a5',lineHeight:1.6}}>
               By connecting, you agree to CryptChat's decentralized<br />

@@ -1,48 +1,41 @@
 import { useState, useEffect } from 'react';
+import { useAccount, useDisconnect } from 'wagmi';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
 import { authStore } from './lib/api';
-import { getOrCreateKeyPair, exportPublicKey, getCachedPublicKey } from './lib/crypto';
-
-type CryptoStatus = 'ready' | 'error';
+import { getOrCreateKeyPair, exportPublicKey } from './lib/crypto';
 
 export default function App() {
+  const { isConnected, address } = useAccount();
+  const { disconnect } = useDisconnect();
   const [loggedIn, setLoggedIn] = useState(() => !!authStore.token);
   const [page, setPage] = useState<'chat' | 'profile'>('chat');
-  const [cryptoStatus, setCryptoStatus] = useState<CryptoStatus>('ready');
-  const [cryptoError, setCryptoError] = useState('');
   const [myAddress, setMyAddress] = useState('');
   const [myPubkeyRegistered, setMyPubkeyRegistered] = useState(false);
 
-  function handleLogin() { setLoggedIn(true); }
+  function handleLogin() {
+    setLoggedIn(true);
+  }
 
-  // On login: generate key pair + register pubkey on backend only (fast, no gas)
-  // On-chain setPubkey is deferred until user adds a friend or sends a message.
+  // On login: generate key pair + register pubkey on backend (fast, no gas)
   useEffect(() => {
     if (!loggedIn || !authStore.user) return;
 
     let cancelled = false;
     (async () => {
       try {
-        const { ethers } = await import('ethers');
-        if (!(window as any).ethereum) {
-          setCryptoError('No MetaMask detected');
-          setCryptoStatus('error');
-          return;
-        }
-        const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const signer = await provider.getSigner();
-        const address = (await signer.getAddress()).toLowerCase();
+        const addr = (address || authStore.user?.address || '').toLowerCase();
+        if (!addr) return;
         if (cancelled) return;
-        setMyAddress(address);
-        console.log('[ECDH] wallet:', address);
+        setMyAddress(addr);
+        console.log('[ECDH] wallet:', addr);
 
-        // Generate ECDH key pair (or load from localStorage)
+        // Generate ECDH key pair
         const keyPair = await getOrCreateKeyPair();
         console.log('[ECDH] key pair ready');
 
-        // Register public key on backend (fast, no gas)
+        // Register on backend
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
         try {
           await fetch('/api/user/pubkey', {
@@ -55,29 +48,33 @@ export default function App() {
           console.warn('[ECDH] backend pubkey failed', e);
         }
 
-        // Check if already registered on-chain
+        // Check on-chain
         const { hasPubkeyOnChain } = await import('./lib/registry');
-        const alreadyOnChain = await hasPubkeyOnChain(address);
+        const alreadyOnChain = await hasPubkeyOnChain(addr);
         if (alreadyOnChain) {
-          console.log('[ECDH] pubkey already on-chain, skipping');
+          console.log('[ECDH] pubkey already on-chain');
         }
         setMyPubkeyRegistered(alreadyOnChain);
-
-        setCryptoStatus('ready');
       } catch (err: any) {
         console.error('[ECDH] init error:', err);
-        if (!cancelled) {
-          setCryptoError(err.message);
-          setCryptoStatus('error');
-        }
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [loggedIn]);
+
+  // Auto-logout if wallet disconnects
+  useEffect(() => {
+    if (!isConnected && loggedIn) {
+      handleLogout();
+    }
+  }, [isConnected]);
 
   function handleLogout() {
     authStore.clear();
+    disconnect();
     setLoggedIn(false);
     setPage('chat');
     setMyAddress('');
@@ -91,12 +88,9 @@ export default function App() {
 
   return (
     <ChatPage
-      cryptoStatus={cryptoStatus}
-      cryptoError={cryptoError}
       myAddress={myAddress}
       myPubkeyRegistered={myPubkeyRegistered}
       onPubkeyRegistered={() => setMyPubkeyRegistered(true)}
-      onLogout={handleLogout}
       onGoProfile={() => setPage('profile')}
     />
   );

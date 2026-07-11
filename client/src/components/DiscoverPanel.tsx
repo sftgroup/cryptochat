@@ -10,10 +10,9 @@ interface DiscoverResult {
 
 interface Props {
   onStartChat: (address: string) => void;
-  onInviteToGroup: (address: string) => void;
 }
 
-export default function DiscoverPanel({ onStartChat, onInviteToGroup }: Props) {
+export default function DiscoverPanel({ onStartChat }: Props) {
   const [ceresResults, setCeresResults] = useState<DiscoverResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQ, setSearchQ] = useState('');
