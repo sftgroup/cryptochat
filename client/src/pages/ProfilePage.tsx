@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { authStore, getProfile, updateProfile } from '../lib/api';
+import { useState } from 'react';
+import { authStore, updateProfile } from '../lib/api';
 
 interface Props { onBack: () => void; onLogout: () => void; }
 
@@ -25,14 +25,14 @@ export default function ProfilePage({ onBack, onLogout }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-tw-bg">
+    <div className="min-h-screen bg-white">
       {/* Header */}
-      <header className="sticky top-0 bg-tw-bg/80 backdrop-blur-md border-b border-tw-border px-4 py-3 flex items-center gap-4 z-10">
-        <button onClick={onBack} className="text-tw-text-dim hover:text-white transition-colors text-lg">
+      <header className="sticky top-0 bg-white/90 backdrop-blur-md border-b border-[#eff3f4] px-4 py-3 flex items-center gap-4 z-10">
+        <button onClick={onBack} className="text-[#536471] hover:text-[#0f1419] transition-colors text-lg">
           ←
         </button>
-        <h2 className="text-white font-bold text-lg flex-1">Profile</h2>
-        <button onClick={onLogout} className="text-tw-text-dim hover:text-tw-red text-sm transition-colors">
+        <h2 className="text-[#0f1419] font-bold text-lg flex-1">Profile</h2>
+        <button onClick={onLogout} className="text-[#536471] hover:text-[#f4212e] text-sm transition-colors">
           Logout
         </button>
       </header>
@@ -56,41 +56,41 @@ export default function ProfilePage({ onBack, onLogout }: Props) {
 
         {/* Name */}
         <div className="tw-card p-6">
-          <label className="text-tw-text-dim text-xs font-semibold uppercase tracking-wider mb-2 block">Display Name</label>
+          <label className="text-[#536471] text-xs font-semibold uppercase tracking-wider mb-2 block">Display Name</label>
           <input
             type="text" placeholder="Your name"
             value={displayName} onChange={e => setDisplayName(e.target.value)}
             className="tw-input w-full"
           />
-          <label className="text-tw-text-dim text-xs font-semibold uppercase tracking-wider mt-4 mb-2 block">Bio</label>
+          <label className="text-[#536471] text-xs font-semibold uppercase tracking-wider mt-4 mb-2 block">Bio</label>
           <textarea
             placeholder="Tell people about yourself..."
             value={bio} onChange={e => setBio(e.target.value)}
             maxLength={160}
             className="tw-input w-full resize-none h-20"
           />
-          <div className="text-tw-text-dim text-xs mt-1">{bio.length}/160</div>
+          <div className="text-[#536471] text-xs mt-1">{bio.length}/160</div>
         </div>
 
         {/* Wallet */}
         <div className="tw-card p-6">
-          <label className="text-tw-text-dim text-xs font-semibold uppercase tracking-wider mb-2 block">Wallet Address</label>
-          <div className="text-tw-text font-mono text-sm break-all">{user.address}</div>
+          <label className="text-[#536471] text-xs font-semibold uppercase tracking-wider mb-2 block">Wallet Address</label>
+          <div className="text-[#0f1419] font-mono text-sm break-all">{user.address}</div>
           {user.ensName && (
-            <div className="text-tw-blue text-sm mt-1">{user.ensName}</div>
+            <div className="text-[#1d9bf0] text-sm mt-1">{user.ensName}</div>
           )}
         </div>
 
         {/* Save */}
-        {error && <p className="text-tw-red text-sm">{error}</p>}
+        {error && <p className="text-[#f4212e] text-sm">{error}</p>}
         <button onClick={handleSave} disabled={saving}
-          className="tw-btn w-full">
+          className="tw-btn tw-btn-primary w-full">
           {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save Profile'}
         </button>
 
         {/* Logout */}
         <div className="text-center pb-8">
-          <button onClick={onLogout} className="text-tw-text-dim hover:text-tw-red text-sm transition-colors">
+          <button onClick={onLogout} className="text-[#536471] hover:text-[#f4212e] text-sm transition-colors">
             Disconnect Wallet
           </button>
         </div>

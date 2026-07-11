@@ -62,18 +62,18 @@ export default function DiscoverPanel({ onStartChat, onInviteToGroup }: Props) {
           placeholder="Search users..."
           value={searchQ}
           onChange={e => setSearchQ(e.target.value)}
-          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-brand/50"
+          className="w-full bg-[#f7f9f9] border border-[#cfd9de] rounded-lg px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] focus:outline-none focus:border-[#1d9bf0]"
         />
         {searchResults.length > 0 && (
           <div className="mt-2 space-y-1">
             {searchResults.map(u => (
-              <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 group">
+              <div key={u.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#f7f9f9] group">
                 <div className="min-w-0 flex-1">
-                  <div className="text-white text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
-                  <div className="text-gray-500 text-xs font-mono truncate">{u.address}</div>
+                  <div className="text-[#0f1419] text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
+                  <div className="text-[#536471] text-xs font-mono truncate">{u.address}</div>
                 </div>
                 <button onClick={() => onStartChat(u.address)}
-                  className="text-xs text-brand hover:text-white opacity-0 group-hover:opacity-100 transition-all ml-2">
+                  className="text-xs text-[#1d9bf0] hover:text-[#1a8cd8] opacity-0 group-hover:opacity-100 transition-all ml-2">
                   Chat
                 </button>
               </div>
@@ -84,26 +84,26 @@ export default function DiscoverPanel({ onStartChat, onInviteToGroup }: Props) {
 
       {/* Ceres Connections */}
       <div>
-        <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1">
+        <h3 className="text-[#536471] text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1">
           🌐 Ceres Network
-          {loading && <span className="text-amber-400 normal-case text-[10px]">loading...</span>}
+          {loading && <span className="text-[#1d9bf0] normal-case text-[10px]">loading...</span>}
         </h3>
         {ceresResults.length === 0 && !loading && (
-          <p className="text-gray-600 text-xs">No Ceres connections found. Invite friends to build your network!</p>
+          <p className="text-[#536471] text-xs">No Ceres connections found. Invite friends to build your network!</p>
         )}
         {ceresResults.map((r, i) => (
-          <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 group">
+          <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-[#f7f9f9] group">
             <div className="min-w-0 flex-1">
-              <div className="text-white text-sm truncate">
+              <div className="text-[#0f1419] text-sm truncate">
                 {r.displayName || r.address.slice(0,6)+'...'+r.address.slice(-4)}
               </div>
-              <div className="text-gray-500 text-xs">
+              <div className="text-[#536471] text-xs">
                 {r.relation === 'invited_by' ? '📥 Invited you' : '📤 You invited'}
               </div>
             </div>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
               <button onClick={() => onStartChat(r.address)}
-                className="text-xs px-2 py-1 rounded bg-brand/20 text-brand hover:bg-brand/30">
+                className="text-xs px-2 py-1 rounded bg-[#1d9bf0]/10 text-[#1d9bf0] hover:bg-[#1d9bf0]/20">
                 Chat
               </button>
             </div>

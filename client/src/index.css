@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 @theme {
-  /* Twitter-like dark color system */
-  --color-tw-bg: #000000;
-  --color-tw-card: #16181c;
-  --color-tw-card-hover: #1d1f23;
-  --color-tw-border: #2f3336;
-  --color-tw-border-light: #2f333688;
-  --color-tw-text: #e7e9ea;
-  --color-tw-text-dim: #71767b;
+  /* Twitter/X white/light color system */
+  --color-tw-bg: #ffffff;
+  --color-tw-bg-dim: #f7f9f9;
+  --color-tw-card: #f7f9f9;
+  --color-tw-card-hover: #eff3f4;
+  --color-tw-border: #eff3f4;
+  --color-tw-border-dark: #cfd9de;
+  --color-tw-text: #0f1419;
+  --color-tw-text-dim: #536471;
   --color-tw-blue: #1d9bf0;
   --color-tw-blue-hover: #1a8cd8;
   --color-tw-green: #00ba7c;
@@ -20,28 +21,28 @@
 @layer base {
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-    background: #000000;
-    color: #e7e9ea;
+    background: #ffffff;
+    color: #0f1419;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
   }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: #2f3336; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb { background: #cfd9de; border-radius: 2px; }
 }
 
 @layer components {
   .tw-card {
-    background: #16181c;
-    border: 1px solid #2f3336;
+    background: #f7f9f9;
+    border: 1px solid #eff3f4;
     border-radius: 16px;
   }
   .tw-card-hover:hover {
-    background: #1d1f23;
+    background: #eff3f4;
   }
   .tw-btn {
-    background: #1d9bf0;
+    background: #0f1419;
     color: #fff;
     font-weight: 700;
     font-size: 15px;
@@ -51,32 +52,37 @@
     cursor: pointer;
     transition: background 0.2s;
   }
-  .tw-btn:hover { background: #1a8cd8; }
+  .tw-btn:hover { background: #272c30; }
   .tw-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .tw-btn-primary {
+    background: #1d9bf0;
+    color: #fff;
+  }
+  .tw-btn-primary:hover { background: #1a8cd8; }
   .tw-btn-outline {
     background: transparent;
-    color: #1d9bf0;
-    border: 1px solid #536471;
+    color: #0f1419;
+    border: 1px solid #cfd9de;
     font-weight: 700;
     border-radius: 9999px;
     padding: 8px 20px;
     cursor: pointer;
     transition: background 0.2s;
   }
-  .tw-btn-outline:hover { background: rgba(29,155,240,0.1); }
+  .tw-btn-outline:hover { background: rgba(15,20,25,0.05); }
   .tw-input {
-    background: transparent;
-    border: 1px solid #2f3336;
+    background: #ffffff;
+    border: 1px solid #cfd9de;
     border-radius: 8px;
     padding: 12px 16px;
-    color: #e7e9ea;
+    color: #0f1419;
     font-size: 15px;
     outline: none;
     transition: border-color 0.2s;
   }
   .tw-input:focus { border-color: #1d9bf0; }
   .tw-input::placeholder { color: #536471; }
-  .tw-divider { border: none; border-top: 1px solid #2f3336; }
+  .tw-divider { border: none; border-top: 1px solid #eff3f4; }
   .tw-avatar {
     width: 40px; height: 40px;
     border-radius: 50%;
@@ -87,7 +93,7 @@
   }
   .tw-avatar-sm { width: 32px; height: 32px; font-size: 13px; }
   .tw-avatar-lg { width: 80px; height: 80px; font-size: 32px; }
-  .tw-skeleton { background: #202327; border-radius: 8px; animation: tw-pulse 1.5s infinite; }
+  .tw-skeleton { background: #eff3f4; border-radius: 8px; animation: tw-pulse 1.5s infinite; }
   @keyframes tw-pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }

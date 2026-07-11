@@ -46,7 +46,7 @@ export async function login(address: string, signature: string) {
 // --- Profile ---
 export async function getProfile() {
   const r = await fetch(`${API}/profile`, { headers: authStore.headers() });
-  return (await r.json()).user;
+  return (await r.json()).user || null;
 }
 export async function getProfileByAddress(addr: string) {
   const r = await fetch(`${API}/profile/${addr}`);
@@ -66,11 +66,11 @@ export async function updateProfile(data: { displayName?: string; avatarUrl?: st
 // --- Friends ---
 export async function getFriends() {
   const r = await fetch(`${API}/friends`, { headers: authStore.headers() });
-  return (await r.json()).friends;
+  return (await r.json()).friends || [];
 }
 export async function getFriendRequests() {
   const r = await fetch(`${API}/friends/requests`, { headers: authStore.headers() });
-  return (await r.json()).requests;
+  return (await r.json()).requests || [];
 }
 export async function sendFriendRequest(address: string) {
   const r = await fetch(`${API}/friends/request`, {
@@ -110,5 +110,5 @@ export async function searchUsers(token: string, q: string) {
 // --- Groups ---
 export async function getGroups() {
   const r = await fetch(`${API}/groups`, { headers: authStore.headers() });
-  return (await r.json()).groups;
+  return (await r.json()).groups || [];
 }

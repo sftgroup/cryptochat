@@ -102,6 +102,51 @@ userRouter.patch('/profile', authMiddleware, async (req: AuthRequest, res) => {
 });
 
 /**
+ * POST /api/user/pubkey
+ * Register ECDH public key
+ */
+userRouter.post('/pubkey', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { publicKey } = req.body;
+    if (!publicKey || typeof publicKey !== 'string' || publicKey.length > 2000) {
+      return res.status(400).json({ error: 'Invalid publicKey' });
+    }
+
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { publicKey },
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('pubkey error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+/**
+ * GET /api/user/pubkey/:address
+ * Get a user's ECDH public key by wallet address
+ */
+userRouter.get('/pubkey/:address', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const user = await prisma.user.findFirst({
+      where: { address: req.params.address.toLowerCase() },
+      select: { id: true, address: true, publicKey: true },
+    });
+
+    if (!user || !user.publicKey) {
+      return res.status(404).json({ error: 'Public key not found' });
+    }
+
+    res.json({ userId: user.id, address: user.address, publicKey: user.publicKey });
+  } catch (err) {
+    console.error('pubkey get error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+/**
  * GET /api/user/:id
  * Get another user's public profile
  */
