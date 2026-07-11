@@ -6,6 +6,7 @@ import { encodeTxMessage, decodeTxMessage } from '../lib/tx';
 import type { TxMessage, TransferPayload } from '../lib/tx';
 import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
+import IpfsMomentContent from '../components/IpfsMomentContent';
 
 interface FriendInfo { userId: string; address: string; displayName: string; avatarUrl: string | null; bio: string | null; status: string; id: string; }
 interface FriendReq { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; }
@@ -419,16 +420,45 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                     className="w-full bg-white border border-[#cfd9de] rounded-xl px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0] resize-none" />
                   <div className="flex justify-between items-center">
                     <span className="text-[#536471] text-xs">{newMoment.length}/280</span>
-                    <button onClick={async () => {
-                      if (!newMoment.trim()) return;
-                      setPostingMoment(true);
-                      try {
-                        const r = await fetch('/api/moments', { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ content: newMoment.trim() }) });
-                        if (r.ok) { const d = await r.json(); setMoments(prev => [d.moment, ...prev]); setNewMoment(''); }
-                      } catch (e) {}
-                      setPostingMoment(false);
-                    }} disabled={!newMoment.trim() || postingMoment}
-                      className="bg-[#1d9bf0] text-white font-bold text-sm px-4 py-1.5 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Post</button>
+                    <div className="flex gap-2 items-center">
+                      <label className="text-[#1d9bf0] text-xs bg-[#1d9bf0]/5 hover:bg-[#1d9bf0]/10 px-3 py-1 rounded-full cursor-pointer font-semibold">
+                        🖼️ Photo
+                        <input type="file" accept="image/*" className="hidden" onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            setNewMoment(prev => prev + ` [Uploading: ${file.name}...]`);
+                            const buf = await file.arrayBuffer();
+                            const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                            const r = await fetch('/api/ipfs/upload', { method: 'POST', headers: { ...authStore.headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: file.name, data: base64, mimeType: file.type }) });
+                            if (r.ok) {
+                              const d = await r.json();
+                              setNewMoment(prev => prev.replace(` [Uploading: ${file.name}...]`, ` ipfs://${d.cid}`));
+                            } else {
+                              setNewMoment(prev => prev.replace(` [Uploading: ${file.name}...]`, ''));
+                            }
+                          } catch { setNewMoment(prev => prev.replace(/ \[Uploading.*?\]/, '')); }
+                          e.target.value = '';
+                        }} />
+                      </label>
+                      <button onClick={async () => {
+                        if (!newMoment.trim()) return;
+                        // Upload content to IPFS first, then store CID reference in DB
+                        try {
+                          setPostingMoment(true);
+                          const content = newMoment.trim();
+                          const base64 = btoa(unescape(encodeURIComponent(content)));
+                          const r = await fetch('/api/ipfs/upload', { method: 'POST', headers: { ...authStore.headers(), 'Content-Type': 'application/json' }, body: JSON.stringify({ fileName: 'moment.txt', data: base64, mimeType: 'text/plain;charset=utf-8' }) });
+                          if (!r.ok) throw new Error('IPFS upload failed');
+                          const { cid } = await r.json();
+                          // Store CID reference in DB
+                          const mr = await fetch('/api/moments', { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ content: `ipfs://${cid}` }) });
+                          if (mr.ok) { const d = await mr.json(); setMoments(prev => [d.moment, ...prev]); setNewMoment(''); }
+                        } catch (e) { console.error('post moment error', e); }
+                        setPostingMoment(false);
+                      }} disabled={!newMoment.trim() || postingMoment}
+                        className="bg-[#1d9bf0] text-white font-bold text-sm px-4 py-1.5 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Post</button>
+                    </div>
                   </div>
                 </div>
                 {moments.length === 0 && <p className="text-[#536471] text-sm text-center py-6">No moments yet. Share something!</p>}
@@ -438,7 +468,11 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                       <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold shrink-0">{getAvatarLetter(m.authorAddr || m.userId)}</div>
                       <div className="flex-1 min-w-0"><span className="text-[#0f1419] text-sm font-semibold">{m.authorName || 'User'}</span><span className="text-[#536471] text-xs ml-2">{m.time || ''}</span></div>
                     </div>
-                    <p className="text-[#0f1419] text-sm pl-9">{m.content}</p>
+                    <p className="text-[#0f1419] text-sm pl-9">
+                      {m.content?.startsWith('ipfs://')
+                        ? <IpfsMomentContent cid={m.content.replace('ipfs://', '')} />
+                        : m.content}
+                    </p>
                   </div>
                 ))}
               </div>
