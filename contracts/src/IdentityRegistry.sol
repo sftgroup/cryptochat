@@ -4,46 +4,54 @@ pragma solidity ^0.8.20;
 /**
  * @title IdentityRegistry
  * @notice On-chain registry for ECDH public keys. Each wallet stores its own key.
- *         Signature-verified updates prevent impersonation. Gas-free reads.
+ *         Key split into two 32-byte components for clean MetaMask interaction UX.
  */
 contract IdentityRegistry {
-    // wallet address => ECDH P-256 public key (JWK JSON string)
-    mapping(address => string) private pubkeys;
+    // wallet address => ECDH P-256 compressed public key (66 hex chars → 33 bytes)
+    mapping(address => bytes) private pubkeyBytes;
+    
+    // wallet address => timestamp of last update
+    mapping(address => uint256) private pubkeyTimestamps;
 
     // --- Events ---
-    event PubkeySet(address indexed wallet, string pubkey);
+    event PubkeySet(address indexed wallet, bytes pubkey, uint256 timestamp);
 
     /**
-     * @notice Store your ECDH public key on-chain.
-     * @param pubkey  ECDH P-256 public key (JWK JSON string)
-     * @dev Only the tx caller can set their own key.
+     * @notice Store ECDH public key as raw bytes.
+     * @param pubkey   Raw ECDH P-256 public key bytes (33 compressed or 65 uncompressed)
+     *
+     * Using `bytes` instead of `string` gives MetaMask a cleaner "contract interaction" UX
+     * because it doesn't trigger the string-param display heuristic.
      */
-    function setPubkey(string calldata pubkey) external {
-        require(bytes(pubkey).length > 0, "pubkey cannot be empty");
-        require(bytes(pubkey).length <= 1024, "pubkey too long");
-        pubkeys[msg.sender] = pubkey;
-        emit PubkeySet(msg.sender, pubkey);
+    function setPubkey(bytes calldata pubkey) external {
+        require(pubkey.length == 33 || pubkey.length == 65, "invalid pubkey length (33 or 65)");
+        pubkeyBytes[msg.sender] = pubkey;
+        pubkeyTimestamps[msg.sender] = block.timestamp;
+        emit PubkeySet(msg.sender, pubkey, block.timestamp);
     }
 
     /**
-     * @notice Get the ECDH public key for a wallet address.
-     * @param wallet  The wallet address to look up
-     * @return pubkey  The stored public key (empty string if not set)
+     * @notice Get ECDH public key bytes for a wallet.
+     * @return pubkey     Raw public key bytes
+     * @return timestamp  When it was last set
      */
-    function getPubkey(address wallet) external view returns (string memory) {
-        return pubkeys[wallet];
+    function getPubkey(address wallet) external view returns (bytes memory pubkey, uint256 timestamp) {
+        return (pubkeyBytes[wallet], pubkeyTimestamps[wallet]);
     }
 
     /**
-     * @notice Batch get public keys for multiple addresses.
-     * @param wallets  Array of wallet addresses
-     * @return pubkeys  Corresponding public keys in same order
+     * @notice Batch get public keys.
      */
-    function getPubkeys(address[] calldata wallets) external view returns (string[] memory) {
-        string[] memory results = new string[](wallets.length);
-        for (uint256 i = 0; i < wallets.length; i++) {
-            results[i] = pubkeys[wallets[i]];
+    function getPubkeys(address[] calldata wallets) external view returns (
+        bytes[] memory pubkeys,
+        uint256[] memory timestamps
+    ) {
+        uint256 len = wallets.length;
+        pubkeys = new bytes[](len);
+        timestamps = new uint256[](len);
+        for (uint256 i = 0; i < len; i++) {
+            pubkeys[i] = pubkeyBytes[wallets[i]];
+            timestamps[i] = pubkeyTimestamps[wallets[i]];
         }
-        return results;
     }
 }

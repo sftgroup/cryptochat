@@ -69,10 +69,10 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
   async function getFriendPubkey(address: string): Promise<JsonWebKey | null> {
     // 1. Try on-chain (decentralized, trustless)
     try {
-      const chainPubkey = await getPubkeyFromChain(address);
-      if (chainPubkey) {
+      const result = await getPubkeyFromChain(address);
+      if (result.pubkey) {
         console.log('[ECDH] got pubkey from chain for:', address.slice(0,10));
-        return importPublicKey(chainPubkey);
+        return importPublicKey(result.pubkey);
       }
     } catch (e) {
       console.warn('[ECDH] chain lookup skipped:', e);
