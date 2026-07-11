@@ -4,7 +4,7 @@ import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey, getCachedPublicKey } from './lib/crypto';
-import { setPubkeyOnChain } from './lib/registry';
+import { signPubkeyAttestation } from './lib/registry';
 
 type CryptoStatus = 'ready' | 'error';
 
@@ -57,12 +57,18 @@ export default function App() {
           console.warn('[ECDH] backend pubkey failed', e);
         }
 
-        // 2. On-chain (decentralized trust)
+        // 2. EIP-712 attestation (zero gas — signed off-chain)
         try {
-          const txHash = await setPubkeyOnChain(pubkeyStr);
-          console.log('[ECDH] pubkey on-chain:', txHash);
+          const attestation = await signPubkeyAttestation(pubkeyStr);
+          // Store attestation on backend so friends can verify
+          await fetch('/api/user/pubkey-attestation', {
+            method: 'POST',
+            headers: authStore.headers(),
+            body: JSON.stringify(attestation),
+          });
+          console.log('[ECDH] EIP-712 attestation saved (zero gas)');
         } catch (e) {
-          console.warn('[ECDH] on-chain pubkey skipped (or not deployed yet)', e);
+          console.warn('[ECDH] EIP-712 attestation skipped', e);
         }
 
         setMyPubkeyRegistered(true);

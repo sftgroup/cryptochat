@@ -132,16 +132,45 @@ userRouter.get('/pubkey/:address', authMiddleware, async (req: AuthRequest, res)
   try {
     const user = await prisma.user.findFirst({
       where: { address: req.params.address.toLowerCase() },
-      select: { id: true, address: true, publicKey: true },
+      select: { id: true, address: true, publicKey: true, pubkeyAttestation: true },
     });
 
     if (!user || !user.publicKey) {
       return res.status(404).json({ error: 'Public key not found' });
     }
 
-    res.json({ userId: user.id, address: user.address, publicKey: user.publicKey });
+    res.json({
+      userId: user.id, address: user.address, publicKey: user.publicKey,
+      attestation: user.pubkeyAttestation ? JSON.parse(user.pubkeyAttestation) : null,
+    });
   } catch (err) {
     console.error('pubkey get error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+/**
+ * POST /api/user/pubkey-attestation
+ * Store EIP-712 signed attestation for the user's public key
+ */
+userRouter.post('/pubkey-attestation', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { wallet, pubkey, timestamp, signature } = req.body;
+    if (!wallet || !pubkey || !timestamp || !signature) {
+      return res.status(400).json({ error: 'Missing attestation fields' });
+    }
+
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: {
+        publicKey: pubkey,
+        pubkeyAttestation: JSON.stringify({ wallet, pubkey, timestamp, signature }),
+      },
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('pubkey-attestation error:', err);
     res.status(500).json({ error: 'Internal error' });
   }
 });

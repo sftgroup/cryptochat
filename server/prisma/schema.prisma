@@ -14,15 +14,16 @@ model User {
   avatarUrl   String?
   displayName String?
   bio         String?
-  publicKey   String?  // ECDH P-256 public key JWK for E2EE
+  publicKey   String?
+  pubkeyAttestation String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  sessions    Session[]
-  contacts    Contact[]  @relation("UserContacts")
-  contactOf   Contact[]  @relation("ContactOf")
-  groupMembers GroupMember[]
-  createdGroups Group[]  @relation("GroupCreator")
+  sessions      Session[]
+  contacts      Contact[]    @relation("UserContacts")
+  contactOf     Contact[]    @relation("ContactOf")
+  groupMembers  GroupMember[]
+  createdGroups Group[]      @relation("GroupCreator")
 
   @@index([address])
 }
@@ -52,13 +53,13 @@ model Nonce {
 }
 
 model Contact {
-  id         String   @id @default(uuid())
-  userId     String
-  user       User     @relation("UserContacts", fields: [userId], references: [id])
-  contactId  String
-  contact    User     @relation("ContactOf", fields: [contactId], references: [id])
-  status     String   @default("pending")
-  createdAt  DateTime @default(now())
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserContacts", fields: [userId], references: [id])
+  contactId String
+  contact   User     @relation("ContactOf", fields: [contactId], references: [id])
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
 
   @@unique([userId, contactId])
   @@index([userId])
@@ -66,26 +67,25 @@ model Contact {
 }
 
 model Message {
-  id         String   @id @default(uuid())
-  senderId   String
-  receiverId String
-  content    String
-  messageType String  @default("text")
-  metadata   String?
-  read       Boolean  @default(false)
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  content     String
+  messageType String   @default("text")
+  metadata    String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
   @@index([senderId, receiverId])
   @@index([receiverId, createdAt])
 }
 
-// Group chat
 model Group {
   id          String   @id @default(uuid())
   name        String
   description String?
   avatarUrl   String?
-  xmtpGroupId String?  // XMTP group conversation ID (after creation)
+  xmtpGroupId String?
   creatorId   String
   creator     User     @relation("GroupCreator", fields: [creatorId], references: [id])
   createdAt   DateTime @default(now())
@@ -98,13 +98,13 @@ model Group {
 }
 
 model GroupMember {
-  id        String   @id @default(uuid())
-  groupId   String
-  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  role      String   @default("member") // admin, member
-  joinedAt  DateTime @default(now())
+  id       String   @id @default(uuid())
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
 
   @@unique([groupId, userId])
   @@index([userId])
