@@ -1,96 +1,114 @@
-const API_BASE = '/api';
+const API = 'http://localhost:4089/api'; // nginx proxied
 
-interface NonceResponse { nonce: string }
-interface LoginResponse {
-  token: string;
-  refreshToken: string;
-  user: { id: string; address: string; ensName: string | null; avatarUrl: string | null; displayName: string };
-}
+export const authStore = {
+  token: localStorage.getItem('cryptchat_token') || null,
+  refreshToken: localStorage.getItem('cryptchat_refresh') || null,
+  user: JSON.parse(localStorage.getItem('cryptchat_user') || 'null') as any,
+  setAuth(token: string, refreshToken: string, user: any) {
+    this.token = token;
+    this.refreshToken = refreshToken;
+    this.user = user;
+    localStorage.setItem('cryptchat_token', token);
+    localStorage.setItem('cryptchat_refresh', refreshToken);
+    localStorage.setItem('cryptchat_user', JSON.stringify(user));
+  },
+  clear() {
+    this.token = null;
+    this.refreshToken = null;
+    this.user = null;
+    localStorage.removeItem('cryptchat_token');
+    localStorage.removeItem('cryptchat_refresh');
+    localStorage.removeItem('cryptchat_user');
+  },
+  headers() {
+    return { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` };
+  },
+};
 
-interface SearchResult { users: Array<{ id: string; address: string; ensName: string | null; avatarUrl: string | null; displayName: string }> }
-
+// --- Auth ---
 export async function getNonce(address: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/auth/nonce?address=${address}`);
-  if (!res.ok) throw new Error('Failed to get nonce');
-  const data: NonceResponse = await res.json();
-  return data.nonce;
+  const r = await fetch(`${API}/auth/nonce?address=${address}`);
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error);
+  return d.nonce;
 }
-
-export async function login(address: string, signature: string): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+export async function login(address: string, signature: string) {
+  const r = await fetch(`${API}/auth/login`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ address, signature }),
   });
-  if (!res.ok) throw new Error('Login failed');
-  return res.json();
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error);
+  authStore.setAuth(d.token, d.refreshToken, d.user);
+  return d.user;
 }
 
-export async function refreshToken(token: string): Promise<{ token: string; refreshToken: string }> {
-  const res = await fetch(`${API_BASE}/auth/refresh`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ refreshToken: token }),
+// --- Profile ---
+export async function getProfile() {
+  const r = await fetch(`${API}/profile`, { headers: authStore.headers() });
+  return (await r.json()).user;
+}
+export async function getProfileByAddress(addr: string) {
+  const r = await fetch(`${API}/profile/${addr}`);
+  return (await r.json()).user;
+}
+export async function updateProfile(data: { displayName?: string; avatarUrl?: string; bio?: string }) {
+  const r = await fetch(`${API}/profile`, {
+    method: 'PATCH', headers: authStore.headers(),
+    body: JSON.stringify(data),
   });
-  if (!res.ok) throw new Error('Token refresh failed');
-  return res.json();
+  const d = await r.json();
+  authStore.user = d.user;
+  localStorage.setItem('cryptchat_user', JSON.stringify(d.user));
+  return d.user;
 }
 
-export async function getProfile(token: string) {
-  const res = await fetch(`${API_BASE}/user/me`, {
+// --- Friends ---
+export async function getFriends() {
+  const r = await fetch(`${API}/friends`, { headers: authStore.headers() });
+  return (await r.json()).friends;
+}
+export async function getFriendRequests() {
+  const r = await fetch(`${API}/friends/requests`, { headers: authStore.headers() });
+  return (await r.json()).requests;
+}
+export async function sendFriendRequest(address: string) {
+  const r = await fetch(`${API}/friends/request`, {
+    method: 'POST', headers: authStore.headers(),
+    body: JSON.stringify({ address }),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error);
+  return d;
+}
+export async function acceptFriendRequest(requestId: string) {
+  const r = await fetch(`${API}/friends/accept`, {
+    method: 'POST', headers: authStore.headers(),
+    body: JSON.stringify({ requestId }),
+  });
+  return r.json();
+}
+export async function removeFriend(address: string) {
+  const r = await fetch(`${API}/friends/${address}`, {
+    method: 'DELETE', headers: authStore.headers(),
+  });
+  return r.json();
+}
+export async function getFriendStatus(address: string) {
+  const r = await fetch(`${API}/friends/status/${address}`, { headers: authStore.headers() });
+  return (await r.json()).status;
+}
+
+// --- Discovery ---
+export async function searchUsers(token: string, q: string) {
+  const r = await fetch(`${API}/discover/search?q=${encodeURIComponent(q)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (!res.ok) throw new Error('Failed to get profile');
-  return res.json();
+  return r.json();
 }
 
-export async function searchUsers(token: string, query: string): Promise<SearchResult> {
-  const res = await fetch(`${API_BASE}/user/search?q=${encodeURIComponent(query)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error('Search failed');
-  return res.json();
+// --- Groups ---
+export async function getGroups() {
+  const r = await fetch(`${API}/groups`, { headers: authStore.headers() });
+  return (await r.json()).groups;
 }
-
-class AuthStore {
-  private _token: string | null = null;
-  private _refreshToken: string | null = null;
-  private _user: LoginResponse['user'] | null = null;
-
-  get token() { return this._token; }
-  get user() { return this._user; }
-  get isLoggedIn() { return !!this._token; }
-
-  setSession(res: LoginResponse) {
-    this._token = res.token;
-    this._refreshToken = res.refreshToken;
-    this._user = res.user;
-    localStorage.setItem('cc_token', res.token);
-    localStorage.setItem('cc_refresh', res.refreshToken);
-    localStorage.setItem('cc_user', JSON.stringify(res.user));
-  }
-
-  loadSession(): boolean {
-    const t = localStorage.getItem('cc_token');
-    const r = localStorage.getItem('cc_refresh');
-    const u = localStorage.getItem('cc_user');
-    if (t && u) {
-      this._token = t;
-      this._refreshToken = r;
-      try { this._user = JSON.parse(u); } catch { return false; }
-      return true;
-    }
-    return false;
-  }
-
-  clear() {
-    this._token = null;
-    this._refreshToken = null;
-    this._user = null;
-    localStorage.removeItem('cc_token');
-    localStorage.removeItem('cc_refresh');
-    localStorage.removeItem('cc_user');
-  }
-}
-
-export const authStore = new AuthStore();

@@ -1,37 +1,32 @@
 import { useState, useEffect } from 'react';
-import { authStore } from './lib/api';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
+import ProfilePage from './pages/ProfilePage';
+import { authStore } from './lib/api';
 
-function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  const [loading, setLoading] = useState(true);
+export default function App() {
+  const [loggedIn, setLoggedIn] = useState(!!authStore.token);
+  const [page, setPage] = useState<'chat' | 'profile'>('chat');
 
   useEffect(() => {
-    const hasSession = authStore.loadSession();
-    setLoggedIn(hasSession);
-    setLoading(false);
+    if (authStore.token) setLoggedIn(true);
   }, []);
 
-  const handleLogin = () => setLoggedIn(true);
-  const handleLogout = () => {
+  function handleLogin() {
+    setLoggedIn(true);
+  }
+
+  function handleLogout() {
     authStore.clear();
     setLoggedIn(false);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-deep">
-        <div className="text-brand animate-pulse text-sm font-mono">Loading...</div>
-      </div>
-    );
+    setPage('chat');
   }
 
-  if (!loggedIn) {
-    return <LoginPage onLogin={handleLogin} />;
+  if (!loggedIn) return <LoginPage onLogin={handleLogin} />;
+
+  if (page === 'profile') {
+    return <ProfilePage onBack={() => setPage('chat')} onLogout={handleLogout} />;
   }
 
-  return <ChatPage onLogout={handleLogout} />;
+  return <ChatPage onLogout={handleLogout} onGoProfile={() => setPage('profile')} />;
 }
-
-export default App;

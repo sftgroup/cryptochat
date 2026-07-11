@@ -7,6 +7,8 @@ import { userRouter } from './routes/user.js';
 import { txRouter } from './routes/tx.js';
 import { groupRouter } from './routes/groups.js';
 import { discoverRouter } from './routes/discover.js';
+import { profileRouter } from './routes/profile.js';
+import { friendsRouter } from './routes/friends.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '4088', 10);
@@ -20,6 +22,8 @@ app.use('/api/user', userRouter);
 app.use('/api/tx', txRouter);
 app.use('/api/groups', groupRouter);
 app.use('/api/discover', discoverRouter);
+app.use('/api/profile', profileRouter);
+app.use('/api/friends', friendsRouter);
 
 // Health
 app.get('/api/health', (_req, res) => {

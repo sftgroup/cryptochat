@@ -1,110 +1,98 @@
 import { useState } from 'react';
-import { getNonce, login, authStore } from '../lib/api';
+import { ethers } from 'ethers';
+import { getNonce, login } from '../lib/api';
 
-declare global {
-  interface Window {
-    ethereum?: {
-      request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-      on: (event: string, cb: (...args: unknown[]) => void) => void;
-      removeListener: (event: string, cb: (...args: unknown[]) => void) => void;
-      selectedAddress?: string;
-    };
-  }
-}
-
-interface Props {
-  onLogin: () => void;
-}
+interface Props { onLogin: () => void; }
 
 export default function LoginPage({ onLogin }: Props) {
-  const [status, setStatus] = useState<'idle' | 'connecting' | 'signing' | 'error'>('idle');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [hasMetamask, setHasMetamask] = useState(!!(window as any).ethereum);
 
-  const handleLogin = async () => {
-    if (!window.ethereum) {
-      setError('Please install MetaMask or a Web3 wallet');
-      setStatus('error');
-      return;
-    }
-
+  async function connect() {
+    setError('');
+    setLoading(true);
     try {
-      setStatus('connecting');
-      setError('');
-
-      // Request accounts
-      const accounts = (await window.ethereum.request({ method: 'eth_requestAccounts' })) as string[];
-      const address = accounts[0].toLowerCase();
-
-      // Get nonce
-      const nonce = await getNonce(address);
-
-      // Sign
-      setStatus('signing');
-      const signature = await window.ethereum.request({
-        method: 'personal_sign',
-        params: [nonce, address],
-      }) as string;
-
-      // Login
-      const res = await login(address, signature);
-      authStore.setSession(res);
-      onLogin();
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      if (msg.includes('rejected') || msg.includes('denied')) {
-        setError('Signature rejected');
-      } else {
-        setError(msg);
+      if (!(window as any).ethereum) {
+        setHasMetamask(false);
+        setLoading(false);
+        return;
       }
-      setStatus('error');
+
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      await provider.send('eth_requestAccounts', []);
+      const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+
+      const nonce = await getNonce(address);
+      const signature = await signer.signMessage(nonce);
+      await login(address, signature);
+      onLogin();
+    } catch (err: any) {
+      if (err?.code === 'ACTION_REJECTED' || err?.code === 4001) {
+        setError('You rejected the signature request.');
+      } else {
+        setError(err?.message?.slice(0, 120) || 'Connection failed');
+      }
     }
-  };
+    setLoading(false);
+  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-6">
-      {/* Logo + Title */}
-      <div className="text-center mb-10">
-        <div className="text-6xl mb-4">💬</div>
-        <h1 className="text-4xl font-black tracking-tight text-white mb-2">
-          Crypt<span className="gradient-text">Chat</span>
-        </h1>
-        <p className="text-gray-400 text-sm">
-          Wallet as identity. End-to-end encrypted.
-        </p>
+    <div className="min-h-screen bg-tw-bg flex flex-col items-center justify-center p-6">
+      {/* Logo */}
+      <div className="mb-8 text-center">
+        <div className="tw-avatar tw-avatar-lg mx-auto mb-4 text-4xl">🔒</div>
+        <h1 className="text-white text-3xl font-bold">CryptChat</h1>
+        <p className="text-tw-text-dim mt-2 text-[15px]">Encrypted messaging. Wallet identity. Social.</p>
       </div>
 
-      {/* Login Card */}
-      <div className="glow-card p-8 w-full max-w-sm space-y-4">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold">
-            🔑
+      {/* Features */}
+      <div className="flex gap-4 mb-8 text-center">
+        {[
+          { icon: '🔑', label: 'Wallet Sign-In' },
+          { icon: '🔐', label: 'End-to-End Encrypted' },
+          { icon: '💬', label: 'Chat & Groups' },
+        ].map(f => (
+          <div key={f.label} className="text-tw-text-dim text-sm">
+            <div className="text-xl mb-1">{f.icon}</div>
+            {f.label}
           </div>
-          <div>
-            <div className="text-white font-semibold text-sm">Wallet Sign-In</div>
-            <div className="text-gray-500 text-xs">No email or password needed</div>
-          </div>
-        </div>
+        ))}
+      </div>
 
-        <button
-          onClick={handleLogin}
-          disabled={status === 'connecting' || status === 'signing'}
-          className="btn-brand w-full"
-        >
-          {status === 'connecting' ? 'Connecting...' :
-           status === 'signing' ? 'Signing...' :
-           'Connect Wallet'}
-        </button>
-
-        {error && (
-          <div className="text-red-400 text-xs text-center bg-red-400/10 rounded-lg py-2 px-3">
-            {error}
-          </div>
+      {/* Connect */}
+      <button
+        onClick={connect}
+        disabled={loading}
+        className="tw-btn px-10 py-3 text-[15px] font-bold min-w-[240px]"
+      >
+        {loading ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            Signing in...
+          </span>
+        ) : (
+          'Connect Wallet'
         )}
+      </button>
 
-        <div className="text-gray-600 text-xs text-center pt-2">
-          Supports MetaMask, Coinbase Wallet, WalletConnect
-        </div>
-      </div>
+      {error && (
+        <p className="mt-4 text-tw-red text-sm max-w-sm text-center">{error}</p>
+      )}
+
+      {!hasMetamask && (
+        <p className="mt-4 text-tw-text-dim text-sm">
+          No wallet detected.{' '}
+          <a href="https://metamask.io" target="_blank" className="text-tw-blue hover:underline">
+            Install MetaMask
+          </a>
+        </p>
+      )}
+
+      <p className="mt-8 text-tw-text-dim text-xs">
+        Powered by XMTP · Ceres · BSC
+      </p>
     </div>
   );
 }
