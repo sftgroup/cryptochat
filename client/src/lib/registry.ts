@@ -1,12 +1,10 @@
 /**
- * On-chain Identity Registry integration — v2.
+ * On-chain Identity Registry integration — v2.1.
  *
- * Contract: IdentityRegistry.sol  v2  (0x253E08cE05ae2C72D19b14506C58CA5Fe9FDdC0f)
+ * Contract: IdentityRegistry.sol v2 (0x253E08cE05ae2C72D19b14506C58CA5Fe9FDdC0f)
  *
- * Key change from v1: `setPubkey(bytes)` instead of `setPubkey(string)`.
- * Uses `bytes` calldata to give MetaMask a clean "Contract interaction" UX.
- *
- * Tech stack: viem (same as Ceres/wagmi) for proper wallet prompts.
+ * Uses viem's createWalletClient + writeContract (same stack as Ceres/wagmi)
+ * for proper MetaMask "Contract Interaction" prompts.
  */
 
 const CONTRACT_ADDRESS = '0x253E08cE05ae2C72D19b14506C58CA5Fe9FDdC0f';
@@ -51,48 +49,51 @@ const ABI = [
   }
 ] as const;
 
-// ── On-chain write (one-time gas, viem-encoded for clean MetaMask UX) ──
+// ── viem walletClient.writeContract (identical to Ceres/wagmi stack) ──
 
 /**
  * Store ECDH public key on-chain.
  *
- * Passes raw bytes (0x-prefixed hex) — MetaMask shows "Contract interaction", not "Send ETH".
- * One-time ~0.0001 Sepolia ETH in gas.
+ * Uses viem's createWalletClient + writeContract — the exact same flow
+ * that Ceres uses via wagmi's useWriteContract.  MetaMask should show
+ * a clean "Contract Interaction" prompt.
  */
 export async function setPubkeyOnChain(pubkeyJson: string): Promise<string> {
   if (!(window as any).ethereum) throw new Error('MetaMask not found');
 
-  const { encodeFunctionData, stringToHex, createPublicClient, http } = await import('viem');
+  const {
+    createWalletClient, custom, createPublicClient, http,
+    stringToHex,
+  } = await import('viem');
   const { sepolia } = await import('viem/chains');
 
-  // Convert JWK JSON string → hex bytes
   const pubkeyBytes = stringToHex(pubkeyJson);
 
-  const data = encodeFunctionData({
+  // Create wallet client from MetaMask — wagmi does the same internally
+  const walletClient = createWalletClient({
+    chain: sepolia,
+    transport: custom((window as any).ethereum),
+  });
+
+  const [account] = await walletClient.getAddresses();
+
+  // This is the exact call wagmi's writeContractAsync does
+  const hash = await walletClient.writeContract({
+    address: CONTRACT_ADDRESS,
     abi: ABI,
     functionName: 'setPubkey',
     args: [pubkeyBytes],
+    account,
+    chain: sepolia,
   });
 
-  const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
-  const from = accounts[0];
+  console.log('[Registry] writeContract tx:', hash);
 
-  const txHash = await (window as any).ethereum.request({
-    method: 'eth_sendTransaction',
-    params: [{
-      from,
-      to: CONTRACT_ADDRESS,
-      data,
-      value: '0x0',
-    }],
-  });
+  // Wait for confirmation
+  const publicClient = createPublicClient({ chain: sepolia, transport: http() });
+  await publicClient.waitForTransactionReceipt({ hash });
 
-  console.log('[Registry] setPubkey (bytes) — contract interaction:', txHash);
-  console.log('[Registry]   value: 0 ETH, gas only');
-
-  const client = createPublicClient({ chain: sepolia, transport: http() });
-  await client.waitForTransactionReceipt({ hash: txHash as `0x${string}` });
-  return txHash as string;
+  return hash;
 }
 
 // ── On-chain read (free) ──────────────────────────────

@@ -4,7 +4,6 @@ import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey, getCachedPublicKey } from './lib/crypto';
-import { setPubkeyOnChain } from './lib/registry';
 
 type CryptoStatus = 'ready' | 'error';
 
@@ -18,7 +17,8 @@ export default function App() {
 
   function handleLogin() { setLoggedIn(true); }
 
-  // Generate ECDH key pair + register public key on backend
+  // On login: generate key pair + register pubkey on backend only (fast, no gas)
+  // On-chain setPubkey is deferred until user adds a friend or sends a message.
   useEffect(() => {
     if (!loggedIn || !authStore.user) return;
 
@@ -42,10 +42,8 @@ export default function App() {
         const keyPair = await getOrCreateKeyPair();
         console.log('[ECDH] key pair ready');
 
-        // Register public key on backend AND on-chain
+        // Register public key on backend (fast, no gas)
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
-
-        // 1. Backend (fast, for convenience)
         try {
           await fetch('/api/user/pubkey', {
             method: 'POST',
@@ -57,15 +55,13 @@ export default function App() {
           console.warn('[ECDH] backend pubkey failed', e);
         }
 
-        // 2. On-chain (decentralized trust, one-time gas)
-        try {
-          const txHash = await setPubkeyOnChain(pubkeyStr);
-          console.log('[ECDH] pubkey on-chain tx:', txHash);
-        } catch (e: any) {
-          console.warn('[ECDH] on-chain pubkey tx failed:', e.message);
+        // Check if already registered on-chain
+        const { hasPubkeyOnChain } = await import('./lib/registry');
+        const alreadyOnChain = await hasPubkeyOnChain(address);
+        if (alreadyOnChain) {
+          console.log('[ECDH] pubkey already on-chain, skipping');
         }
-
-        setMyPubkeyRegistered(true);
+        setMyPubkeyRegistered(alreadyOnChain);
 
         setCryptoStatus('ready');
       } catch (err: any) {
@@ -99,6 +95,7 @@ export default function App() {
       cryptoError={cryptoError}
       myAddress={myAddress}
       myPubkeyRegistered={myPubkeyRegistered}
+      onPubkeyRegistered={() => setMyPubkeyRegistered(true)}
       onLogout={handleLogout}
       onGoProfile={() => setPage('profile')}
     />

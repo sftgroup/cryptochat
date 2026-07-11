@@ -18,11 +18,12 @@ interface Props {
   cryptoError: string;
   myAddress: string;
   myPubkeyRegistered: boolean;
+  onPubkeyRegistered: () => void;
   onLogout: () => void;
   onGoProfile: () => void;
 }
 
-export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubkeyRegistered, onLogout, onGoProfile }: Props) {
+export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubkeyRegistered, onPubkeyRegistered, onLogout, onGoProfile }: Props) {
   const user = authStore.user!;
   const [tab, setTab] = useState<'friends' | 'groups' | 'requests'>('friends');
   const [friends, setFriends] = useState<FriendInfo[]>([]);
@@ -225,9 +226,46 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
 
   async function sendTransfer(_payload: TransferPayload) { setShowTransfer(false); }
 
+  /**
+   * Ensure pubkey is registered on-chain before any social action.
+   * Blocks with a clear error message if gas is insufficient or user rejects.
+   */
+  async function ensurePubkeyOnChain(): Promise<boolean> {
+    if (myPubkeyRegistered) return true;
+
+    setAddFriendErr('');
+    setAddFriendMsg('⛽ Identity not yet on-chain. One-time gas required.');
+
+    try {
+      const { setPubkeyOnChain } = await import('../lib/registry');
+      const { exportPublicKey, getOrCreateKeyPair } = await import('../lib/crypto');
+      const kp = await getOrCreateKeyPair();
+      await setPubkeyOnChain(exportPublicKey(kp.publicKey));
+      onPubkeyRegistered();
+      setAddFriendMsg('✅ Identity registered on-chain!');
+      return true;
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      if (msg.includes('insufficient funds') || msg.includes('Insufficient')) {
+        setAddFriendErr('❌ Insufficient Sepolia ETH for gas. Get free test ETH from faucet.quicknode.com/ethereum/sepolia');
+      } else if (msg.includes('rejected') || msg.includes('denied') || msg.includes('User')) {
+        setAddFriendErr('❌ Transaction rejected. You must register on-chain before adding friends.');
+      } else {
+        setAddFriendErr('❌ ' + msg);
+      }
+      setAddFriendMsg('');
+      return false;
+    }
+  }
+
   async function handleAddFriend() {
     setAddFriendErr(''); setAddFriendMsg('');
     if (!addFriendAddr.trim()) return;
+
+    // Must register on-chain first
+    const ok = await ensurePubkeyOnChain();
+    if (!ok) return;
+
     try {
       const result = await sendFriendRequest(addFriendAddr.trim());
       setAddFriendMsg(result.status === 'accepted' ? 'You are now friends! ✅' : 'Friend request sent! 📨');
@@ -244,6 +282,11 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
   }
   async function handleCreateGroup() {
     if (!newGroupName.trim()) return;
+
+    // Must register on-chain first
+    const ok = await ensurePubkeyOnChain();
+    if (!ok) return;
+
     setCreatingGroup(true);
     try {
       await fetch('/api/groups', { method: 'POST', headers: authStore.headers(),
