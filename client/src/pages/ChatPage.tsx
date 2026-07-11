@@ -289,20 +289,6 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
       <div className="flex flex-1 overflow-hidden">
         {/* LEFT SIDEBAR */}
         <aside className="w-72 flex flex-col bg-white flex-shrink-0 border-r border-[#eff3f4]">
-          <div className="px-3 pt-3 pb-2 space-y-1.5">
-            <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
-              className={`w-full text-left px-4 py-2 rounded-full text-sm font-semibold transition-colors ${rightPanel === 'add_friend' ? 'bg-[#1d9bf0]/10 text-[#1d9bf0]' : 'text-white bg-[#0f1419] hover:bg-[#272c30]'}`}>
-              + Add Friend
-            </button>
-            <button onClick={onGoProfile}
-              className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
-                {getAvatarLetter(user.displayName || user.address)}
-              </span>
-              My Profile
-            </button>
-          </div>
-          <div className="border-t border-[#eff3f4]" />
           <div className="flex border-b border-[#eff3f4]">
             {[
               { key: 'friends' as const, label: 'Friends' },
@@ -318,7 +304,7 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
           <div className="flex-1 overflow-y-auto">
             {tab === 'friends' && (
               <>
-                {friends.length === 0 && <p className="text-[#536471] text-sm p-4 text-center">No friends yet. Add friends above!</p>}
+                {friends.length === 0 && <p className="text-[#536471] text-sm p-4 text-center">No friends yet. Add friends below!</p>}
                 {friends.map(f => (
                   <button key={f.userId} onClick={() => startDmChat(f)}
                     className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-b border-[#eff3f4] ${
@@ -392,6 +378,21 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                 ))}
               </>
             )}
+          </div>
+
+          {/* Bottom actions */}
+          <div className="border-t border-[#eff3f4] p-3 space-y-1.5">
+            <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
+              className={`w-full text-left px-4 py-2 rounded-full text-sm font-semibold transition-colors ${rightPanel === 'add_friend' ? 'bg-[#1d9bf0]/10 text-[#1d9bf0]' : 'text-white bg-[#0f1419] hover:bg-[#272c30]'}`}>
+              + Add Friend
+            </button>
+            <button onClick={onGoProfile}
+              className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+                {getAvatarLetter(user.displayName || user.address)}
+              </span>
+              My Profile
+            </button>
           </div>
         </aside>
 
