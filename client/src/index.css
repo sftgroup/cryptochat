@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme {
+  --color-deep: #0a0a0f;
+  --color-deep-lighter: #111118;
+  --color-brand: #00e5ff;
+  --color-brand-dim: #0097a7;
+  --color-brand-glow: #00e5ff66;
+}
+
+@layer base {
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    background: #0a0a0f; 
+    color: #e0e0e0; 
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(10, 10, 15, 0.6);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .glow-card {
+    background: rgba(17, 17, 24, 0.7);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(0, 229, 255, 0.12);
+    border-radius: 16px;
+    transition: all 0.4s;
+  }
+  .glow-card:hover {
+    border-color: rgba(0, 229, 255, 0.4);
+    box-shadow: 0 0 30px rgba(0, 229, 255, 0.12);
+  }
+  .gradient-text {
+    background: linear-gradient(135deg, #00e5ff 0%, #0097a7 50%, #00e5ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .btn-brand {
+    background: linear-gradient(135deg, #00e5ff, #0097a7);
+    color: #000;
+    font-weight: 700;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 32px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .btn-brand:hover {
+    box-shadow: 0 0 30px rgba(0,229,255,0.4);
+    transform: translateY(-1px);
+  }
+  .btn-brand:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
