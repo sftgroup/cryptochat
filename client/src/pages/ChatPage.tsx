@@ -355,7 +355,7 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
       <div className="flex flex-1 overflow-hidden">
         {/* LEFT SIDEBAR */}
         <aside className="w-72 flex flex-col bg-white flex-shrink-0 border-r border-[#eff3f4]">
-          <div className="flex border-b border-[#eff3f4]">
+          <div className="flex border-b border-[#eff3f4] bg-white">
             {[
               { key: 'friends' as const, label: 'Friends' },
               { key: 'groups' as const, label: 'Groups' },
@@ -368,7 +368,7 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
               </button>
             ))}
           </div>
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto border-b border-[#eff3f4]">
             {tab === 'friends' && (
               <>
                 {friends.length === 0 && <p className="text-[#536471] text-sm p-4 text-center">No friends yet. Add friends below!</p>}
@@ -506,10 +506,16 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
             {tab === 'groups' && (
               <>
                 {!showCreateGroup ? (
-                  <button onClick={() => setShowCreateGroup(true)}
-                    className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-white bg-[#0f1419] hover:bg-[#272c30] transition-colors">
-                    + Create Group
-                  </button>
+                  <>
+                    <button onClick={() => setShowCreateGroup(true)}
+                      className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-white bg-[#0f1419] hover:bg-[#272c30] transition-colors">
+                      + Create Group
+                    </button>
+                    <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
+                      className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
+                      + Join Group
+                    </button>
+                  </>
                 ) : (
                   <button onClick={() => setShowCreateGroup(false)}
                     className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#536471] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
