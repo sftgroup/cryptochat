@@ -10,6 +10,8 @@ import { discoverRouter } from './routes/discover.js';
 import { profileRouter } from './routes/profile.js';
 import { friendsRouter } from './routes/friends.js';
 import { dmRouter } from './routes/dm.js';
+import { momentsRouter } from './routes/moments.js';
+import { ipfsRouter } from './routes/ipfs.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '4088', 10);
@@ -26,6 +28,8 @@ app.use('/api/discover', discoverRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/friends', friendsRouter);
 app.use('/api/dm', dmRouter);
+app.use('/api/moments', momentsRouter);
+app.use('/api/ipfs', ipfsRouter);
 
 // Health
 app.get('/api/health', (_req, res) => {

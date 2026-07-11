@@ -122,3 +122,13 @@ model GroupMessage {
 
   @@index([groupId, createdAt])
 }
+
+model Moment {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}

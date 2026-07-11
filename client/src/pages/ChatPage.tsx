@@ -25,7 +25,7 @@ interface Props {
 
 export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubkeyRegistered, onPubkeyRegistered, onLogout, onGoProfile }: Props) {
   const user = authStore.user!;
-  const [tab, setTab] = useState<'friends' | 'groups' | 'requests'>('friends');
+  const [tab, setTab] = useState<'friends' | 'groups' | 'moments' | 'requests'>('friends');
   const [friends, setFriends] = useState<FriendInfo[]>([]);
   const [requests, setRequests] = useState<FriendReq[]>([]);
   const [groups, setGroups] = useState<GroupInfo[]>([]);
@@ -43,6 +43,10 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
   const [addFriendErr, setAddFriendErr] = useState('');
   const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
   const [encryptionReady, setEncryptionReady] = useState(false);
+  // Moments
+  const [moments, setMoments] = useState<any[]>([]);
+  const [newMoment, setNewMoment] = useState('');
+  const [postingMoment, setPostingMoment] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval>>();
   const lastMsgIdRef = useRef('');
   const keyPairRef = useRef<KeyPair | null>(null);
@@ -64,6 +68,10 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
     try { setFriends(await getFriends()); } catch {}
     try { setRequests(await getFriendRequests()); } catch {}
     try { setGroups(await getGroups()); } catch {}
+    try {
+      const r = await fetch('/api/moments', { headers: authStore.headers() });
+      if (r.ok) { const d = await r.json(); setMoments(d.moments); }
+    } catch {}
   }
 
   // Fetch friend's public key — on-chain first, backend fallback
@@ -350,6 +358,7 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
             {[
               { key: 'friends' as const, label: 'Friends' },
               { key: 'groups' as const, label: 'Groups' },
+              { key: 'moments' as const, label: 'Moments' },
               { key: 'requests' as const, label: requests.length > 0 ? `Requests (${requests.length})` : 'Requests' },
             ].map(t => (
               <button key={t.key} onClick={() => setTab(t.key)}
@@ -379,7 +388,7 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
             )}
             {tab === 'groups' && (
               <>
-                {groups.length === 0 && !showCreateGroup && <p className="text-[#536471] text-sm p-4 text-center">No groups yet.</p>}
+                {groups.length === 0 && !showCreateGroup && <p className="text-[#536471] text-sm p-4 text-center">No groups yet. Create one below!</p>}
                 {groups.map(g => (
                   <button key={g.id} onClick={() => { setMessages([]); stopPolling(); setActiveChat({ type: 'group', group: g }); setRightPanel(null); }}
                     className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left border-b border-[#eff3f4] ${activeChat?.type === 'group' && activeChat.group.id === g.id ? 'bg-[#f7f9f9] border-r-2 border-r-[#1d9bf0]' : 'hover:bg-[#f7f9f9]'}`}>
@@ -390,28 +399,49 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
                     </div>
                   </button>
                 ))}
-                <div className="p-3 space-y-2">
-                  {!showCreateGroup && (
-                    <button onClick={() => setShowCreateGroup(true)}
-                      className="w-full px-4 py-2 rounded-full text-sm font-semibold text-white bg-[#0f1419] hover:bg-[#272c30] transition-colors">+ Create Group</button>
-                  )}
-                  <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
-                    className="w-full px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">+ Join Group</button>
-                </div>
                 {showCreateGroup && (
-                  <div className="px-3 pb-3 space-y-2">
+                  <div className="px-3 pb-3 space-y-2 mt-2">
                     <input type="text" placeholder="Group name" value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
                       className="w-full bg-white border border-[#cfd9de] rounded-lg px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" autoFocus />
                     <input type="text" placeholder="Description (optional)" value={newGroupDesc} onChange={e => setNewGroupDesc(e.target.value)}
                       className="w-full bg-white border border-[#cfd9de] rounded-lg px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" />
-                    <div className="flex gap-2">
-                      <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
-                        className="bg-[#1d9bf0] text-white font-bold text-sm px-4 py-2 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Create</button>
-                      <button onClick={() => setShowCreateGroup(false)} className="text-[#536471] text-sm hover:text-[#0f1419]">Cancel</button>
-                    </div>
+                    <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
+                      className="w-full bg-[#1d9bf0] text-white font-bold text-sm py-2 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Create Group</button>
                   </div>
                 )}
               </>
+            )}
+            {tab === 'moments' && (
+              <div className="px-3 py-3 space-y-3">
+                <div className="space-y-2">
+                  <textarea placeholder="What's on your mind?" value={newMoment} onChange={e => setNewMoment(e.target.value)}
+                    rows={3}
+                    className="w-full bg-white border border-[#cfd9de] rounded-xl px-3 py-2 text-sm text-[#0f1419] placeholder-[#536471] outline-none focus:border-[#1d9bf0] resize-none" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-[#536471] text-xs">{newMoment.length}/280</span>
+                    <button onClick={async () => {
+                      if (!newMoment.trim()) return;
+                      setPostingMoment(true);
+                      try {
+                        const r = await fetch('/api/moments', { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ content: newMoment.trim() }) });
+                        if (r.ok) { const d = await r.json(); setMoments(prev => [d.moment, ...prev]); setNewMoment(''); }
+                      } catch (e) {}
+                      setPostingMoment(false);
+                    }} disabled={!newMoment.trim() || postingMoment}
+                      className="bg-[#1d9bf0] text-white font-bold text-sm px-4 py-1.5 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Post</button>
+                  </div>
+                </div>
+                {moments.length === 0 && <p className="text-[#536471] text-sm text-center py-6">No moments yet. Share something!</p>}
+                {moments.map((m: any, i: number) => (
+                  <div key={m.id || i} className="border-b border-[#eff3f4] pb-3">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold shrink-0">{getAvatarLetter(m.authorAddr || m.userId)}</div>
+                      <div className="flex-1 min-w-0"><span className="text-[#0f1419] text-sm font-semibold">{m.authorName || 'User'}</span><span className="text-[#536471] text-xs ml-2">{m.time || ''}</span></div>
+                    </div>
+                    <p className="text-[#0f1419] text-sm pl-9">{m.content}</p>
+                  </div>
+                ))}
+              </div>
             )}
             {tab === 'requests' && (
               <>
@@ -437,12 +467,37 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
             )}
           </div>
 
-          {/* Bottom actions */}
+          {/* Bottom actions — tabs show different actions */}
           <div className="border-t border-[#eff3f4] p-3 space-y-1.5">
-            <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
-              className={`w-full text-left px-4 py-2 rounded-full text-sm font-semibold transition-colors ${rightPanel === 'add_friend' ? 'bg-[#1d9bf0]/10 text-[#1d9bf0]' : 'text-white bg-[#0f1419] hover:bg-[#272c30]'}`}>
-              + Add Friend
-            </button>
+            {tab === 'groups' && (
+              <>
+                {!showCreateGroup ? (
+                  <button onClick={() => setShowCreateGroup(true)}
+                    className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-white bg-[#0f1419] hover:bg-[#272c30] transition-colors">
+                    + Create Group
+                  </button>
+                ) : (
+                  <button onClick={() => setShowCreateGroup(false)}
+                    className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#536471] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
+                    Cancel
+                  </button>
+                )}
+              </>
+            )}
+            {tab === 'friends' && (
+              <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
+                className={`w-full text-left px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                  rightPanel === 'add_friend' ? 'bg-[#1d9bf0]/10 text-[#1d9bf0]' : 'text-white bg-[#0f1419] hover:bg-[#272c30]'
+                }`}>
+                + Add Friend
+              </button>
+            )}
+            {tab === 'requests' && (
+              <button onClick={() => setTab('friends')}
+                className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors">
+                ← Back to Friends
+              </button>
+            )}
             <button onClick={onGoProfile}
               className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#0f1419] border border-[#cfd9de] hover:bg-[#f7f9f9] transition-colors flex items-center gap-2">
               <span className="w-5 h-5 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-[10px] font-bold shrink-0">
@@ -512,9 +567,50 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
               </div>
 
               <div className="border-t border-[#eff3f4] p-3 bg-white">
+                {/* Action buttons */}
+                <div className="flex gap-2 mb-2">
+                  <button
+                    onClick={() => { setShowTransfer(true); }}
+                    className="text-[#f4212e] text-xs bg-[#f4212e]/5 hover:bg-[#f4212e]/10 px-3 py-1 rounded-full transition-colors font-semibold"
+                    title="Send Red Packet"
+                  >🧧 Red Packet</button>
+                  <label className="text-[#1d9bf0] text-xs bg-[#1d9bf0]/5 hover:bg-[#1d9bf0]/10 px-3 py-1 rounded-full transition-colors font-semibold cursor-pointer" title="Upload file via IPFS">
+                    📎 File
+                    <input type="file" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setComposing(prev => prev + `\n[Uploading: ${file.name}...]`);
+                        // Read file as base64
+                        const buf = await file.arrayBuffer();
+                        const base64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+                        const r = await fetch('/api/ipfs/upload', {
+                          method: 'POST',
+                          headers: { ...authStore.headers(), 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ fileName: file.name, data: base64, mimeType: file.type || 'application/octet-stream' }),
+                        });
+                        if (r.ok) {
+                          const d = await r.json();
+                          setComposing(prev => prev.replace(`[Uploading: ${file.name}...]`, `\nipfs://${d.cid}`).trim());
+                        } else {
+                          setComposing(prev => prev.replace(`[Uploading: ${file.name}...]`, `[Upload failed]`));
+                        }
+                      } catch (err) {
+                        setComposing(prev => prev.replace(`[Uploading: ${file.name}...]`, `[Upload failed]`));
+                      }
+                      e.target.value = '';
+                    }} />
+                  </label>
+                </div>
+                {/* Transfer form */}
+                {showTransfer && (
+                  <div className="mb-2">
+                    <TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} />
+                  </div>
+                )}
                 <div className="flex gap-2 items-end">
                   <input type="text" value={composing} onChange={e => setComposing(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && composing.trim()) { sendDm(); } }}
+                    onKeyDown={e => { if (e.key === 'Enter' && composing.trim() && !showTransfer) { sendDm(); } }}
                     placeholder="Start a new message"
                     className="flex-1 bg-transparent border-none outline-none text-[#0f1419] text-[15px] placeholder-[#536471] py-2" />
                   <button onClick={sendDm} disabled={!composing.trim()}
