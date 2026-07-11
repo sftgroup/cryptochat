@@ -26,7 +26,7 @@ export default function DiscoverPanel({ onStartChat, onInviteToGroup }: Props) {
   async function loadCeresConnections() {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:4089/api/discover/ceres', {
+      const res = await fetch('/api/discover/ceres', {
         headers: { Authorization: `Bearer ${authStore.token}` },
       });
       if (res.ok) {
@@ -41,7 +41,7 @@ export default function DiscoverPanel({ onStartChat, onInviteToGroup }: Props) {
     if (!searchQ || searchQ.length < 2) { setSearchResults([]); return; }
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`http://localhost:4089/api/discover/search?q=${encodeURIComponent(searchQ)}`, {
+        const res = await fetch(`/api/discover/search?q=${encodeURIComponent(searchQ)}`, {
           headers: { Authorization: `Bearer ${authStore.token}` },
         });
         if (res.ok) {

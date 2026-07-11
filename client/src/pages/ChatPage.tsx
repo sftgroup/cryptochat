@@ -1,20 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { Client } from '@xmtp/browser-sdk';
 import { ethers } from 'ethers';
-import {
-  authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend,
-  getFriendStatus, searchUsers, getGroups,
-} from '../lib/api';
+import { authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend, searchUsers, getGroups } from '../lib/api';
 import { encodeTxMessage, decodeTxMessage } from '../lib/tx';
 import type { TxMessage, TransferPayload } from '../lib/tx';
 import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
-import DiscoverPanel from '../components/DiscoverPanel';
-import CreateGroup from '../components/CreateGroup';
 
-interface ChatMsg { id: string; content?: string; txMsg?: TxMessage; sender: string; timestamp: number; }
-interface FriendInfo { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; bio: string | null; status: string; }
-interface FriendReq { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; createdAt: string; }
+interface FriendInfo { userId: string; address: string; displayName: string; avatarUrl: string | null; bio: string | null; status: string; id: string; }
+interface FriendReq { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; }
 interface GroupInfo { id: string; name: string; description: string | null; members: any[]; }
 
 interface Props { onLogout: () => void; onGoProfile: () => void; }
@@ -22,102 +16,124 @@ interface Props { onLogout: () => void; onGoProfile: () => void; }
 export default function ChatPage({ onLogout, onGoProfile }: Props) {
   const user = authStore.user!;
   const [myAddress, setMyAddress] = useState('');
-
-  // XMTP
   const [xmtpClient, setXmtpClient] = useState<Client | null>(null);
-  const [xmtpLoading, setXmtpLoading] = useState(true);
+
+  // Sidebar tabs
+  const [tab, setTab] = useState<'friends' | 'groups' | 'requests'>('friends');
 
   // Friends
   const [friends, setFriends] = useState<FriendInfo[]>([]);
   const [requests, setRequests] = useState<FriendReq[]>([]);
-  const [showRequests, setShowRequests] = useState(false);
-
-  // Active chat
-  const [activeChat, setActiveChat] = useState<FriendInfo | null>(null);
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [composing, setComposing] = useState('');
-  const [showTransfer, setShowTransfer] = useState(false);
-  const convoIdRef = useRef<string | null>(null);
+  const [sentRequests, setSentRequests] = useState<FriendReq[]>([]);
 
   // Groups
   const [groups, setGroups] = useState<GroupInfo[]>([]);
-  const [activeGroup, setActiveGroup] = useState<GroupInfo | null>(null);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupDesc, setNewGroupDesc] = useState('');
+  const [creatingGroup, setCreatingGroup] = useState(false);
+
+  // Active conversation — can be friend or group
+  const [activeChat, setActiveChat] = useState<{ type: 'dm'; friend: FriendInfo } | { type: 'group'; group: GroupInfo } | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [composing, setComposing] = useState('');
+  const [showTransfer, setShowTransfer] = useState(false);
+  const convoIdRef = useRef<string | null>(null);
+  const pollRef = useRef<any>(null);
 
   // Right panel
-  const [rightPanel, setRightPanel] = useState<'profile' | 'add_friend' | null>(null);
+  const [rightPanel, setRightPanel] = useState<'add_friend' | 'info' | null>(null);
   const [addFriendAddr, setAddFriendAddr] = useState('');
-  const [addFriendStatus, setAddFriendStatus] = useState('');
-  const [addFriendError, setAddFriendError] = useState('');
+  const [addFriendMsg, setAddFriendMsg] = useState('');
+  const [addFriendErr, setAddFriendErr] = useState('');
   const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
+
   const initRef = useRef(false);
 
   // Init
-  useEffect(() => { if (!initRef.current) { initRef.current = true; initXmtp(); } loadData(); }, []);
-  async function initXmtp() {
-    try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const signer = await provider.getSigner();
-      setMyAddress((await signer.getAddress()).toLowerCase());
-      setXmtpClient(await Client.create(signer, { env: 'production' }));
-    } catch (err) { console.error('XMTP:', err); }
-    setXmtpLoading(false);
-  }
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
+    (async () => {
+      try {
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const signer = await provider.getSigner();
+        setMyAddress((await signer.getAddress()).toLowerCase());
+        setXmtpClient(await Client.create(signer, { env: 'production' }));
+      } catch (err) { console.error('XMTP init:', err); }
+    })();
+    loadData();
+  }, []);
+
   async function loadData() {
     try { setFriends(await getFriends()); } catch {}
     try { setRequests(await getFriendRequests()); } catch {}
     try { setGroups(await getGroups()); } catch {}
   }
 
-  // Stream messages
+  // Poll group messages
   useEffect(() => {
-    if (!xmtpClient || !activeChat) return;
+    if (!activeChat || activeChat.type !== 'group') return;
+    const group = activeChat.group;
+    async function poll() {
+      try {
+        const r = await fetch(`/api/groups/${group.id}/messages`, { headers: authStore.headers() });
+        if (r.ok) {
+          const d = await r.json();
+          setMessages(d.messages || []);
+        }
+      } catch {}
+    }
+    poll();
+    pollRef.current = setInterval(poll, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [activeChat]);
+
+  // Stream XMTP
+  useEffect(() => {
+    if (!xmtpClient || !activeChat || activeChat.type !== 'dm') return;
     let cancelled = false;
+    const friend = activeChat.friend;
     (async () => {
       try {
         const convos = await xmtpClient.conversations.list();
-        const convo = convos.find(c => c.id === activeChat.userId);
+        const convo = convos.find(c => c.id === friend.userId);
         if (!convo || convo.id !== convoIdRef.current) return;
         const stream$ = convo.messages({ direction: 'SORT_DIRECTION_DESCENDING' });
-        let prev: ChatMsg[] = [];
+        let prev: any[] = [];
         for await (const m of stream$) {
           if (cancelled || convo.id !== convoIdRef.current) break;
-          const content = typeof m.content === 'string' ? m.content : '';
-          const tx = decodeTxMessage(content);
-          prev.unshift(tx ? { id: m.id || crypto.randomUUID(), txMsg: tx, sender: m.senderAddress || '', timestamp: tx.timestamp } : { id: m.id || crypto.randomUUID(), content, sender: m.senderAddress || '', timestamp: Date.now() });
+          prev.unshift({ id: m.id || crypto.randomUUID(), content: typeof m.content === 'string' ? m.content : '', sender: m.senderAddress || '', time: Date.now() });
         }
         if (!cancelled) setMessages(prev);
         const live$ = await convo.stream({});
         for await (const m of live$) {
           if (cancelled || convo.id !== convoIdRef.current) break;
           const content = typeof m.content === 'string' ? m.content : '';
-          const tx = decodeTxMessage(content);
-          setMessages(prev => [...prev, tx ? { id: m.id || crypto.randomUUID(), txMsg: tx, sender: m.senderAddress || '', timestamp: tx.timestamp } : { id: m.id || crypto.randomUUID(), content, sender: m.senderAddress || '', timestamp: Date.now() }]);
+          setMessages(prev => [...prev, { id: m.id || crypto.randomUUID(), content, sender: m.senderAddress || '', time: Date.now() }]);
         }
       } catch {}
     })();
     return () => { cancelled = true; };
   }, [xmtpClient, activeChat]);
 
-  async function startChat(friend: FriendInfo) {
+  async function startDmChat(friend: FriendInfo) {
     if (!xmtpClient) return;
-    setActiveGroup(null);
     setRightPanel(null);
     try {
       const convos = await xmtpClient.conversations.listDms();
       const existing = convos.find(c => c.peerAddress?.toLowerCase() === friend.address.toLowerCase());
       const id = existing?.id || (await xmtpClient.conversations.newDm(friend.address)).id;
       convoIdRef.current = id;
-      setActiveChat(friend);
-      setMessages([]);
+      setActiveChat({ type: 'dm', friend });
     } catch {}
   }
 
-  async function sendMsg() {
-    if (!xmtpClient || !activeChat || !composing.trim()) return;
+  async function sendDm() {
+    if (!xmtpClient || !activeChat || activeChat.type !== 'dm' || !composing.trim()) return;
     try {
       const convos = await xmtpClient.conversations.listDms();
-      const convo = convos.find(c => c.peerInboxId === activeChat.userId);
+      const convo = convos.find(c => c.peerInboxId === activeChat.friend.userId);
       if (!convo) return;
       await convo.send(composing.trim());
       setComposing('');
@@ -125,151 +141,246 @@ export default function ChatPage({ onLogout, onGoProfile }: Props) {
   }
 
   async function sendTransfer(payload: TransferPayload) {
-    if (!xmtpClient || !activeChat) return;
+    if (!xmtpClient || !activeChat || activeChat.type !== 'dm') return;
     try {
       const convos = await xmtpClient.conversations.listDms();
-      const convo = convos.find(c => c.peerInboxId === activeChat.userId);
+      const convo = convos.find(c => c.peerInboxId === activeChat.friend.userId);
       if (!convo) return;
       await convo.send(encodeTxMessage({ kind: 'tx', txType: 'transfer', payload, from: myAddress, timestamp: Date.now() }));
       setShowTransfer(false);
     } catch {}
   }
 
-  // Friend management
+  async function sendGroupMsg() {
+    if (!activeChat || activeChat.type !== 'group' || !composing.trim()) return;
+    try {
+      await fetch(`/api/groups/${activeChat.group.id}/messages`, {
+        method: 'POST', headers: authStore.headers(),
+        body: JSON.stringify({ content: composing.trim() }),
+      });
+      setComposing('');
+      // Re-poll
+      const r = await fetch(`/api/groups/${activeChat.group.id}/messages`, { headers: authStore.headers() });
+      if (r.ok) setMessages((await r.json()).messages || []);
+    } catch {}
+  }
+
   async function handleAddFriend() {
-    setAddFriendError(''); setAddFriendStatus('');
+    setAddFriendErr(''); setAddFriendMsg('');
     if (!addFriendAddr.trim()) return;
     try {
       const result = await sendFriendRequest(addFriendAddr.trim());
-      setAddFriendStatus(result.status === 'accepted' ? 'You are now friends!' : 'Friend request sent!');
-      loadData();
-    } catch (err: any) { setAddFriendError(err.message); }
-  }
-  async function handleAccept(reqId: string) {
-    await acceptFriendRequest(reqId);
-    loadData();
-  }
-  async function handleRemove(addr: string) {
-    await removeFriend(addr);
-    setActiveChat(null);
-    loadData();
+      if (result.status === 'accepted') {
+        setAddFriendMsg('You are now friends! ✅');
+        loadData();
+      } else {
+        setAddFriendMsg('Friend request sent! 📨');
+      }
+    } catch (err: any) { setAddFriendErr(err.message); }
   }
 
-  // Search users for add friend
+  async function handleAccept(reqId: string) { await acceptFriendRequest(reqId); loadData(); }
+  async function handleRemove(addr: string) { await removeFriend(addr); setActiveChat(null); loadData(); }
+
+  async function handleCreateGroup() {
+    if (!newGroupName.trim()) return;
+    setCreatingGroup(true);
+    try {
+      await fetch('/api/groups', {
+        method: 'POST', headers: authStore.headers(),
+        body: JSON.stringify({ name: newGroupName.trim(), description: newGroupDesc.trim() || undefined }),
+      });
+      loadData();
+      setNewGroupName('');
+      setNewGroupDesc('');
+      setShowCreateGroup(false);
+    } catch {}
+    setCreatingGroup(false);
+  }
+
+  // Search for add friend
   useEffect(() => {
     if (!addFriendAddr || addFriendAddr.length < 3) { setSearchedUsers([]); return; }
     const t = setTimeout(async () => {
       try {
         const r = await searchUsers(authStore.token!, addFriendAddr);
         setSearchedUsers(r.results || []);
-      } catch { setSearchedUsers([]); }
+      } catch {}
     }, 300);
     return () => clearTimeout(t);
   }, [addFriendAddr]);
 
+  function getAvatarLetter(s: string) { return (s || '?')[0].toUpperCase(); }
+
   return (
-    <div className="h-screen flex flex-col bg-tw-bg overflow-hidden">
-      {/* Top Nav */}
-      <header className="border-b border-tw-border px-4 py-3 flex items-center justify-between flex-shrink-0" style={{height:52}}>
+    <div className="h-screen flex flex-col bg-black overflow-hidden" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'}}>
+      {/* Top bar */}
+      <header className="flex items-center justify-between px-4 border-b border-[#2f3336] flex-shrink-0" style={{height:52}}>
         <div className="flex items-center gap-3">
-          <button onClick={onGoProfile} className="tw-avatar tw-avatar-sm">
+          <button onClick={onGoProfile} className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-sm">
             {(user.displayName || user.address)[0].toUpperCase()}
           </button>
-          <h2 className="text-white font-bold text-lg">CryptChat</h2>
-          {xmtpClient && <span className="tw-badge">E2EE</span>}
+          <h1 className="text-[#e7e9ea] font-bold text-lg">CryptChat</h1>
         </div>
-        <button onClick={onLogout} className="text-tw-text-dim hover:text-tw-red text-sm">Logout</button>
+        <button onClick={onLogout} className="text-[#71767b] hover:text-red-400 text-sm">Logout</button>
       </header>
 
-      {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">
-        {/* LEFT SIDEBAR — Friends list */}
-        <aside className="w-72 border-r border-tw-border flex flex-col flex-shrink-0 bg-tw-bg">
-          {/* Request badge */}
-          {requests.length > 0 && (
-            <button onClick={() => setShowRequests(!showRequests)}
-              className="mx-3 mt-3 p-3 rounded-xl bg-tw-blue/10 border border-tw-blue/20 text-tw-blue text-sm font-semibold text-left">
-              🔔 {requests.length} friend request{requests.length > 1 ? 's' : ''}
-            </button>
-          )}
-          {showRequests && requests.map(r => (
-            <div key={r.id} className="px-3 py-2 border-b border-tw-border bg-tw-card/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="tw-avatar tw-avatar-sm">{(r.displayName || r.address)[0].toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white text-sm truncate">{r.displayName}</div>
-                  <div className="text-tw-text-dim text-xs font-mono truncate">{r.address.slice(0,6)}...{r.address.slice(-4)}</div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleAccept(r.id)} className="tw-btn text-xs px-4 py-1">Accept</button>
-                <button onClick={() => handleRemove(r.address)} className="tw-btn-outline text-xs px-4 py-1">Decline</button>
-              </div>
-            </div>
-          ))}
-
-          {/* Friends */}
-          <div className="flex-1 overflow-y-auto">
-            {friends.length === 0 && (
-              <p className="text-tw-text-dim text-sm p-4 text-center">No friends yet. Search users or import from Ceres.</p>
-            )}
-            {friends.map(f => (
-              <button key={f.userId}
-                onClick={() => startChat(f)}
-                className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-tw-card-hover transition-colors text-left ${activeChat?.userId === f.userId ? 'bg-tw-card border-r-2 border-tw-blue' : ''}`}>
-                <div className="tw-avatar">{f.displayName[0].toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white text-[15px] font-medium truncate">{f.displayName}</div>
-                  <div className="text-tw-text-dim text-[13px] truncate">{f.bio || f.address.slice(0,6)+'...'+f.address.slice(-4)}</div>
-                </div>
+        {/* LEFT SIDEBAR */}
+        <aside className="w-72 border-r border-[#2f3336] flex flex-col bg-black flex-shrink-0">
+          {/* Tabs */}
+          <div className="flex border-b border-[#2f3336]">
+            {[
+              { key: 'friends' as const, label: 'Friends', icon: '💬' },
+              { key: 'groups' as const, label: 'Groups', icon: '👥' },
+              { key: 'requests' as const, label: requests.length > 0 ? `Requests (${requests.length})` : 'Requests', icon: '🔔' },
+            ].map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`flex-1 py-3 text-xs font-semibold transition-colors ${tab === t.key ? 'text-[#e7e9ea] border-b-2 border-[#1d9bf0]' : 'text-[#71767b] hover:text-[#e7e9ea]'}`}>
+                {t.icon} {t.label}
               </button>
             ))}
           </div>
 
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto">
+            {tab === 'friends' && (
+              <>
+                {friends.length === 0 && (
+                  <p className="text-[#71767b] text-sm p-4 text-center">
+                    No friends yet. Click "Add Friend" below to find people.
+                  </p>
+                )}
+                {friends.map(f => (
+                  <button key={f.userId} onClick={() => startDmChat(f)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[#16181c] transition-colors text-left ${activeChat?.type === 'dm' && activeChat.friend.userId === f.userId ? 'bg-[#16181c] border-r-2 border-[#1d9bf0]' : ''}`}>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {getAvatarLetter(f.displayName)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[#e7e9ea] text-[15px] font-medium truncate">{f.displayName}</div>
+                      <div className="text-[#71767b] text-[13px] font-mono truncate">{f.address.slice(0,6)}...{f.address.slice(-4)}</div>
+                    </div>
+                  </button>
+                ))}
+              </>
+            )}
+            {tab === 'groups' && (
+              <>
+                {groups.length === 0 && (
+                  <p className="text-[#71767b] text-sm p-4 text-center">No groups yet.</p>
+                )}
+                {groups.map(g => (
+                  <button key={g.id} onClick={() => { setMessages([]); setActiveChat({ type: 'group', group: g }); setRightPanel(null); }}
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-[#16181c] transition-colors text-left ${activeChat?.type === 'group' && activeChat.group.id === g.id ? 'bg-[#16181c] border-r-2 border-[#1d9bf0]' : ''}`}>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00ba7c] to-[#1d9bf0] flex items-center justify-center text-white font-bold text-sm shrink-0">👥</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[#e7e9ea] text-[15px] font-medium truncate">{g.name}</div>
+                      <div className="text-[#71767b] text-[13px]">{g.members?.length || 0} member{(g.members?.length||0) !== 1 ? 's' : ''}</div>
+                    </div>
+                  </button>
+                ))}
+                {showCreateGroup && (
+                  <div className="p-4 space-y-3 border-b border-[#2f3336]">
+                    <input type="text" placeholder="Group name" value={newGroupName} onChange={e => setNewGroupName(e.target.value)}
+                      className="w-full bg-transparent border border-[#2f3336] rounded-lg px-3 py-2 text-sm text-[#e7e9ea] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" autoFocus />
+                    <input type="text" placeholder="Description (optional)" value={newGroupDesc} onChange={e => setNewGroupDesc(e.target.value)}
+                      className="w-full bg-transparent border border-[#2f3336] rounded-lg px-3 py-2 text-sm text-[#e7e9ea] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" />
+                    <div className="flex gap-2">
+                      <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
+                        className="bg-[#1d9bf0] text-white font-bold text-sm px-4 py-2 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50">Create</button>
+                      <button onClick={() => setShowCreateGroup(false)} className="text-[#71767b] text-sm">Cancel</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+            {tab === 'requests' && (
+              <>
+                {requests.length === 0 && (
+                  <p className="text-[#71767b] text-sm p-4 text-center">No pending friend requests.</p>
+                )}
+                {requests.map(r => (
+                  <div key={r.id} className="px-4 py-3 border-b border-[#2f3336]">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold">
+                        {getAvatarLetter(r.displayName)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[#e7e9ea] text-sm truncate">{r.displayName}</div>
+                        <div className="text-[#71767b] text-xs font-mono">{r.address.slice(0,6)}...{r.address.slice(-4)}</div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleAccept(r.id)} className="bg-[#1d9bf0] text-white font-bold text-xs px-4 py-1.5 rounded-full">Accept</button>
+                      <button onClick={() => handleRemove(r.address)} className="text-[#71767b] border border-[#2f3336] font-bold text-xs px-4 py-1.5 rounded-full">Decline</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
           {/* Bottom actions */}
-          <div className="border-t border-tw-border p-3 space-y-2">
+          <div className="border-t border-[#2f3336] p-3 space-y-2">
             <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
-              className={`w-full text-left px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${rightPanel === 'add_friend' ? 'bg-tw-blue/10 text-tw-blue' : 'text-tw-text-dim hover:text-white hover:bg-tw-card'}`}>
+              className={`w-full text-left px-4 py-2 rounded-full text-sm font-semibold transition-colors ${rightPanel === 'add_friend' ? 'bg-[#1d9bf0]/10 text-[#1d9bf0]' : 'text-[#e7e9ea] bg-[#1d9bf0] hover:bg-[#1a8cd8]'}`}>
               + Add Friend
             </button>
-            <button onClick={() => { loadData(); }}
-              className="hidden w-full text-left px-4 py-2 rounded-xl text-sm text-tw-text-dim hover:text-white hover:bg-tw-card transition-colors">
-              ↻ Refresh
-            </button>
+            {tab === 'groups' && !showCreateGroup && (
+              <button onClick={() => setShowCreateGroup(true)}
+                className="w-full text-left px-4 py-2 rounded-full text-sm font-semibold text-[#1d9bf0] border border-[#1d9bf0] hover:bg-[#1d9bf0]/10 transition-colors">
+                + Create Group
+              </button>
+            )}
           </div>
         </aside>
 
         {/* CENTER — Chat */}
-        <main className="flex-1 flex flex-col bg-tw-bg min-w-0">
+        <main className="flex-1 flex flex-col bg-black min-w-0">
           {activeChat ? (
             <>
               {/* Chat header */}
-              <div className="border-b border-tw-border px-4 py-3 flex items-center gap-3">
-                <div className="tw-avatar">{activeChat.displayName[0].toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-white font-semibold text-[15px]">{activeChat.displayName}</div>
-                  <div className="text-tw-text-dim text-[13px] font-mono truncate">{activeChat.address.slice(0,8)}...{activeChat.address.slice(-6)}</div>
-                </div>
-                <button onClick={() => setRightPanel(rightPanel === 'profile' ? null : 'profile')}
-                  className="tw-btn-outline text-xs px-3 py-1">Info</button>
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-[#2f3336]">
+                {activeChat.type === 'dm' ? (
+                  <>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-sm">
+                      {getAvatarLetter(activeChat.friend.displayName)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[#e7e9ea] font-semibold text-[15px]">{activeChat.friend.displayName}</div>
+                      <div className="text-[#71767b] text-[13px] font-mono truncate">{activeChat.friend.address.slice(0,8)}...{activeChat.friend.address.slice(-6)}</div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#00ba7c] to-[#1d9bf0] flex items-center justify-center text-white text-sm">👥</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[#e7e9ea] font-semibold text-[15px]">{activeChat.group.name}</div>
+                      <div className="text-[#71767b] text-[13px]">{activeChat.group.members?.length || 0} members</div>
+                    </div>
+                  </>
+                )}
+                <button onClick={() => setRightPanel(rightPanel === 'info' ? null : 'info')}
+                  className="text-[#71767b] hover:text-[#e7e9ea] text-sm font-semibold">Info</button>
               </div>
 
               {/* Messages */}
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {messages.length === 0 && (
-                  <p className="text-tw-text-dim text-sm text-center py-8">
-                    🔐 End-to-end encrypted. Send a message to start.
-                  </p>
+                  <p className="text-[#71767b] text-sm text-center py-8">Send a message to start the conversation.</p>
                 )}
-                {messages.map((msg, i) => {
-                  const isSent = msg.sender?.toLowerCase() === myAddress;
+                {messages.map((msg: any, i: number) => {
+                  // For DM messages, check if it's a tx card
+                  const txMsg = activeChat.type === 'dm' ? decodeTxMessage(msg.content || '') : null;
+                  const isSent = (msg.sender || '').toLowerCase() === myAddress;
                   return (
                     <div key={msg.id || i} className={`flex ${isSent ? 'justify-end' : 'justify-start'}`}>
-                      {msg.txMsg ? (
-                        <TransferCard msg={msg.txMsg} isSent={isSent} />
+                      {txMsg ? (
+                        <TransferCard msg={txMsg} isSent={isSent} />
                       ) : (
-                        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-[15px] ${isSent ? 'bg-tw-blue text-white rounded-br-md' : 'bg-tw-card text-tw-text rounded-bl-md'}`}>
-                          {msg.content}
+                        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-[15px] ${isSent ? 'bg-[#1d9bf0] text-white rounded-br-md' : 'bg-[#16181c] text-[#e7e9ea] rounded-bl-md border border-[#2f3336]'}`}>
+                          {msg.content || '(encrypted)'}
                         </div>
                       )}
                     </div>
@@ -278,96 +389,106 @@ export default function ChatPage({ onLogout, onGoProfile }: Props) {
               </div>
 
               {/* Input */}
-              <div className="border-t border-tw-border p-3 space-y-2">
-                {showTransfer && <TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} />}
+              <div className="border-t border-[#2f3336] p-3 space-y-2">
+                {showTransfer && activeChat.type === 'dm' && <TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} />}
                 <div className="flex gap-2 items-end">
-                  <button onClick={() => setShowTransfer(!showTransfer)}
-                    className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg transition-colors ${showTransfer ? 'bg-tw-blue text-white' : 'text-tw-text-dim hover:bg-tw-card hover:text-white'}`}>💸</button>
+                  {activeChat.type === 'dm' && (
+                    <button onClick={() => setShowTransfer(!showTransfer)}
+                      className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-lg transition-colors ${showTransfer ? 'bg-[#1d9bf0] text-white' : 'text-[#71767b] hover:bg-[#16181c]'}`}>💸</button>
+                  )}
                   <input type="text" value={composing} onChange={e => setComposing(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && sendMsg()}
+                    onKeyDown={e => e.key === 'Enter' && (activeChat.type === 'dm' ? sendDm() : sendGroupMsg())}
                     placeholder="Start a new message"
-                    className="flex-1 bg-transparent border-none outline-none text-white text-[15px] placeholder-tw-text-dim py-2" />
-                  <button onClick={sendMsg} disabled={!composing.trim()}
-                    className="tw-btn shrink-0 px-5 py-2">Send</button>
+                    className="flex-1 bg-transparent border-none outline-none text-[#e7e9ea] text-[15px] placeholder-[#536471] py-2" />
+                  <button onClick={activeChat.type === 'dm' ? sendDm : sendGroupMsg} disabled={!composing.trim()}
+                    className="bg-[#1d9bf0] text-white font-bold text-sm px-5 py-2 rounded-full hover:bg-[#1a8cd8] disabled:opacity-50 shrink-0">Send</button>
                 </div>
               </div>
             </>
-          ) : activeGroup ? (
-            /* Group view */
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-lg mx-auto text-center">
-                <div className="text-5xl mb-4">👥</div>
-                <h3 className="text-white text-xl font-bold mb-1">{activeGroup.name}</h3>
-                {activeGroup.description && <p className="text-tw-text-dim mb-6">{activeGroup.description}</p>}
-                <p className="text-tw-text-dim text-xs uppercase tracking-wider mb-3">Members ({activeGroup.members?.length || 0})</p>
-                {activeGroup.members?.map((m: any) => (
-                  <div key={m.userId} className="flex items-center gap-3 p-3 rounded-xl hover:bg-tw-card transition-colors">
-                    <div className="tw-avatar">{(m.user?.displayName || m.user?.address)[0]?.toUpperCase()}</div>
-                    <div className="flex-1 text-left">
-                      <div className="text-white text-sm">{m.user?.displayName || m.user?.address?.slice(0,6)+'...'+m.user?.address?.slice(-4)}</div>
-                      <div className="text-tw-text-dim text-xs">{m.role}</div>
-                    </div>
-                  </div>
-                ))}
-                <p className="mt-6 text-tw-text-dim text-sm">🚧 Group messaging coming soon</p>
-              </div>
-            </div>
           ) : (
-            /* Empty state */
             <div className="flex-1 flex flex-col items-center justify-center p-8">
-              <div className="text-6xl mb-4">💬</div>
-              <h3 className="text-white text-2xl font-bold mb-2">Select a conversation</h3>
-              <p className="text-tw-text-dim text-[15px]">Choose a friend from the left or add new friends to start chatting.</p>
+              <div className="text-5xl mb-4">💬</div>
+              <h3 className="text-[#e7e9ea] text-xl font-bold mb-2">CryptChat</h3>
+              <p className="text-[#71767b] text-[15px]">Web3 Encrypted Messaging</p>
+              <p className="text-[#71767b] text-sm mt-1">Select a conversation or add friends to get started.</p>
             </div>
           )}
         </main>
 
         {/* RIGHT PANEL */}
         {rightPanel && (
-          <aside className="w-80 border-l border-tw-border overflow-y-auto bg-tw-bg flex-shrink-0 p-4 space-y-4">
+          <aside className="w-80 border-l border-[#2f3336] bg-black overflow-y-auto flex-shrink-0 p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-white font-bold">{rightPanel === 'add_friend' ? 'Add Friend' : 'Details'}</h3>
-              <button onClick={() => setRightPanel(null)} className="text-tw-text-dim hover:text-white text-lg">✕</button>
+              <h3 className="text-[#e7e9ea] font-bold text-lg">
+                {rightPanel === 'add_friend' ? 'Add Friend' : 'Conversation Info'}
+              </h3>
+              <button onClick={() => setRightPanel(null)} className="text-[#71767b] hover:text-[#e7e9ea] text-lg">✕</button>
             </div>
 
             {rightPanel === 'add_friend' && (
               <div className="space-y-3">
-                <p className="text-tw-text-dim text-sm">Search by wallet address or display name</p>
-                <input type="text" placeholder="0x... or name"
-                  value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
-                  className="tw-input w-full" autoFocus />
+                <p className="text-[#71767b] text-sm">Search by wallet address or name</p>
+                <input type="text" placeholder="0x... or username" value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
+                  className="w-full bg-transparent border border-[#2f3336] rounded-lg px-3 py-2.5 text-sm text-[#e7e9ea] placeholder-[#536471] outline-none focus:border-[#1d9bf0]" autoFocus />
                 {searchedUsers.length > 0 && (
-                  <div className="space-y-1">
+                  <div className="space-y-1 border border-[#2f3336] rounded-lg max-h-48 overflow-y-auto">
                     {searchedUsers.map((u: any) => (
-                      <div key={u.id} onClick={() => setAddFriendAddr(u.address)}
-                        className="flex items-center gap-2 p-2 rounded-xl hover:bg-tw-card cursor-pointer transition-colors">
-                        <div className="tw-avatar tw-avatar-sm">{(u.displayName || u.address)[0].toUpperCase()}</div>
-                        <div className="min-w-0">
-                          <div className="text-white text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
-                          <div className="text-tw-text-dim text-xs font-mono truncate">{u.address}</div>
+                      <button key={u.id} onClick={() => setAddFriendAddr(u.address)}
+                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#16181c] transition-colors text-left">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-xs font-bold">
+                          {getAvatarLetter(u.displayName || u.address)}
                         </div>
-                      </div>
+                        <div className="min-w-0">
+                          <div className="text-[#e7e9ea] text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
+                          <div className="text-[#71767b] text-xs font-mono truncate">{u.address}</div>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 )}
-                <button onClick={handleAddFriend} className="tw-btn w-full">Send Friend Request</button>
-                {addFriendStatus && <p className="text-tw-green text-sm">✓ {addFriendStatus}</p>}
-                {addFriendError && <p className="text-tw-red text-sm">{addFriendError}</p>}
+                <button onClick={handleAddFriend} className="w-full bg-[#1d9bf0] text-white font-bold text-sm py-2.5 rounded-full hover:bg-[#1a8cd8]">
+                  Send Friend Request
+                </button>
+                {addFriendMsg && <p className="text-[#00ba7c] text-sm">{addFriendMsg}</p>}
+                {addFriendErr && <p className="text-red-400 text-sm">{addFriendErr}</p>}
               </div>
             )}
 
-            {rightPanel === 'profile' && activeChat && (
-              <div className="space-y-4">
-                <div className="tw-avatar tw-avatar-lg mx-auto text-3xl">{activeChat.displayName[0].toUpperCase()}</div>
-                <div className="text-center">
-                  <div className="text-white text-lg font-bold">{activeChat.displayName}</div>
-                  <div className="text-tw-text-dim text-sm font-mono break-all mt-1">{activeChat.address}</div>
-                  {activeChat.bio && <p className="text-tw-text text-sm mt-2">{activeChat.bio}</p>}
+            {rightPanel === 'info' && activeChat && activeChat.type === 'dm' && (
+              <div className="space-y-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white font-bold text-2xl mx-auto">
+                  {getAvatarLetter(activeChat.friend.displayName)}
                 </div>
-                <button onClick={() => handleRemove(activeChat.address)}
-                  className="tw-btn-outline w-full border-tw-red text-tw-red hover:bg-tw-red/10">
+                <div>
+                  <div className="text-[#e7e9ea] text-lg font-bold">{activeChat.friend.displayName}</div>
+                  <div className="text-[#71767b] text-sm font-mono break-all mt-1">{activeChat.friend.address}</div>
+                </div>
+                <button onClick={() => handleRemove(activeChat.friend.address)}
+                  className="w-full border border-red-500/30 text-red-400 font-bold text-sm py-2 rounded-full hover:bg-red-500/10">
                   Remove Friend
                 </button>
+              </div>
+            )}
+
+            {rightPanel === 'info' && activeChat && activeChat.type === 'group' && (
+              <div className="space-y-4">
+                <div className="text-center">
+                  <div className="text-4xl mb-2">👥</div>
+                  <div className="text-[#e7e9ea] text-lg font-bold">{activeChat.group.name}</div>
+                  {activeChat.group.description && <div className="text-[#71767b] text-sm mt-1">{activeChat.group.description}</div>}
+                </div>
+                <p className="text-[#71767b] text-xs uppercase tracking-wider">Members ({activeChat.group.members?.length || 0})</p>
+                {activeChat.group.members?.map((m: any) => (
+                  <div key={m.userId} className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#16181c] transition-colors">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#1d9bf0] to-[#7856ff] flex items-center justify-center text-white text-sm font-bold">
+                      {getAvatarLetter(m.user?.displayName || m.user?.address)}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-[#e7e9ea] text-sm">{m.user?.displayName || m.user?.address?.slice(0,6)+'...'+m.user?.address?.slice(-4)}</div>
+                      <div className="text-[#71767b] text-xs capitalize">{m.role}</div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </aside>

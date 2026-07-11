@@ -23,7 +23,7 @@ export default function CreateGroup({ onCreate, onCancel }: Props) {
         .map(s => s.trim())
         .filter(Boolean);
 
-      const res = await fetch('http://localhost:4089/api/groups', {
+      const res = await fetch('/api/groups', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

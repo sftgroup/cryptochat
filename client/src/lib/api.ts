@@ -1,4 +1,4 @@
-const API = 'http://localhost:4089/api'; // nginx proxied
+const API = '/api';
 
 export const authStore = {
   token: localStorage.getItem('cryptchat_token') || null,
