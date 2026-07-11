@@ -35,7 +35,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [composing, setComposing] = useState('');
   const [showTransfer, setShowTransfer] = useState(false);
-  const [rightPanel, setRightPanel] = useState<'add_friend' | 'info' | null>(null);
+  const [rightPanel, setRightPanel] = useState<'add_friend' | 'join_group' | 'info' | null>(null);
   const [addFriendAddr, setAddFriendAddr] = useState('');
   const [addFriendMsg, setAddFriendMsg] = useState('');
   const [addFriendErr, setAddFriendErr] = useState('');
@@ -534,7 +534,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                       className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-800 hover:to-slate-900 shadow-sm transition-all">
                       + Create Group
                     </button>
-                    <button onClick={() => setRightPanel(rightPanel === 'add_friend' ? null : 'add_friend')}
+                    <button onClick={() => setRightPanel(rightPanel === 'join_group' ? null : 'join_group')}
                       className="w-full text-left px-4 py-2.5 rounded-full text-sm font-semibold text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 transition-colors">
                       + Join Group
                     </button>
@@ -720,37 +720,61 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
           <aside className="w-80 border-l border-slate-200/60 bg-white overflow-y-auto flex-shrink-0 p-5 space-y-4 shadow-lg">
             <div className="flex items-center justify-between">
               <h3 className="text-slate-800 font-bold text-lg">
-                {rightPanel === 'add_friend' ? 'Add Friend' : 'Conversation Info'}
+                {rightPanel === 'add_friend' ? 'Add Friend' : rightPanel === 'join_group' ? 'Join Group' : 'Conversation Info'}
               </h3>
               <button onClick={() => setRightPanel(null)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-100 w-8 h-8 rounded-full flex items-center justify-center transition-colors">✕</button>
             </div>
 
-            {rightPanel === 'add_friend' && (
+            {(rightPanel === 'add_friend' || rightPanel === 'join_group') && (
               <div className="space-y-3">
-                <p className="text-slate-500 text-sm">Search by wallet address or name</p>
-                <input type="text" placeholder="0x... or username" value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" autoFocus />
-                {searchedUsers.length > 0 && (
-                  <div className="space-y-1 border border-slate-100 rounded-xl max-h-48 overflow-y-auto bg-slate-50/50">
-                    {searchedUsers.map((u: any) => { const [c1,c2] = getAvatarColor(u.displayName || u.address); return (
-                      <button key={u.id} onClick={() => setAddFriendAddr(u.address)}
-                        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white transition-colors text-left">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
-                          {getAvatarLetter(u.displayName || u.address)}
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-slate-800 text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
-                          <div className="text-slate-400 text-xs font-mono truncate">{u.address}</div>
-                        </div>
-                      </button>
-                    );})}
-                  </div>
+                <p className="text-slate-500 text-sm">
+                  {rightPanel === 'join_group' ? 'Search groups by name to join' : 'Search by wallet address or name'}
+                </p>
+                {rightPanel === 'add_friend' && (
+                  <>
+                    <input type="text" placeholder="0x... or username" value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition-all" autoFocus />
+                    {searchedUsers.length > 0 && (
+                      <div className="space-y-1 border border-slate-100 rounded-xl max-h-48 overflow-y-auto bg-slate-50/50">
+                        {searchedUsers.map((u: any) => { const [c1,c2] = getAvatarColor(u.displayName || u.address); return (
+                          <button key={u.id} onClick={() => setAddFriendAddr(u.address)}
+                            className="w-full flex items-center gap-2 px-3 py-2 hover:bg-white transition-colors text-left">
+                            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
+                              {getAvatarLetter(u.displayName || u.address)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-slate-800 text-sm truncate">{u.displayName || u.address.slice(0,6)+'...'+u.address.slice(-4)}</div>
+                              <div className="text-slate-400 text-xs font-mono truncate">{u.address}</div>
+                            </div>
+                          </button>
+                        );})}
+                      </div>
+                    )}
+                    <button onClick={handleAddFriend} className="w-full bg-gradient-to-r from-slate-700 to-slate-800 text-white font-bold text-sm py-2.5 rounded-full hover:from-slate-800 hover:to-slate-900 shadow-sm transition-all">
+                      Send Friend Request
+                    </button>
+                    {addFriendMsg && <p className="text-emerald-600 text-sm bg-emerald-50 px-3 py-2 rounded-xl">{addFriendMsg}</p>}
+                    {addFriendErr && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-xl">{addFriendErr}</p>}
+                  </>
                 )}
-                <button onClick={handleAddFriend} className="w-full bg-gradient-to-r from-slate-700 to-slate-800 text-white font-bold text-sm py-2.5 rounded-full hover:from-slate-800 hover:to-slate-900 shadow-sm transition-all">
-                  Send Friend Request
-                </button>
-                {addFriendMsg && <p className="text-emerald-600 text-sm bg-emerald-50 px-3 py-2 rounded-xl">{addFriendMsg}</p>}
-                {addFriendErr && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-xl">{addFriendErr}</p>}
+                {rightPanel === 'join_group' && (
+                  <>
+                    <input type="text" placeholder="Group name or ID" value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 transition-all" autoFocus />
+                    <button onClick={async () => {
+                      if (!addFriendAddr.trim()) return;
+                      try {
+                        const res = await fetch('/api/groups/join', { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ name: addFriendAddr.trim() }) });
+                        if (res.ok) { setAddFriendMsg('Joined group!'); loadData(); }
+                        else { const d = await res.json(); setAddFriendErr(d.error || 'Failed to join'); }
+                      } catch { setAddFriendErr('Network error'); }
+                    }} className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-sm py-2.5 rounded-full hover:from-emerald-600 hover:to-emerald-700 shadow-sm transition-all">
+                      Join Group
+                    </button>
+                    {addFriendMsg && <p className="text-emerald-600 text-sm bg-emerald-50 px-3 py-2 rounded-xl">{addFriendMsg}</p>}
+                    {addFriendErr && <p className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-xl">{addFriendErr}</p>}
+                  </>
+                )}
               </div>
             )}
 

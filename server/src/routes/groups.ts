@@ -66,6 +66,42 @@ groupRouter.post('/', async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/groups/join — search groups by name and join
+// Must come BEFORE /:id route to avoid matching "join" as :id
+groupRouter.post('/join', async (req: AuthRequest, res) => {
+  try {
+    const { name } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: 'Group name required' });
+
+    // Search by exact name first, then partial match
+    let group = await prisma.group.findFirst({ where: { name: name.trim() } });
+    if (!group) {
+      group = await prisma.group.findFirst({ where: { name: { contains: name.trim() } } });
+    }
+    if (!group) return res.status(404).json({ error: 'Group not found' });
+
+    // Check if already a member
+    const existing = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId: group.id, userId: req.user!.userId } },
+    });
+    if (existing) return res.status(409).json({ error: 'Already a member' });
+
+    // Join
+    await prisma.groupMember.create({
+      data: { groupId: group.id, userId: req.user!.userId, role: 'member' },
+    });
+
+    const updated = await prisma.group.findUnique({
+      where: { id: group.id },
+      include: { members: { include: { user: { select: { id: true, address: true, displayName: true, avatarUrl: true } } } } },
+    });
+    res.json({ group: updated });
+  } catch (err) {
+    console.error('join by name:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 // GET /api/groups/:id — group details
 groupRouter.get('/:id', async (req: AuthRequest, res) => {
   try {
