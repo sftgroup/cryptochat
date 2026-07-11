@@ -4,6 +4,7 @@ import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey, getCachedPublicKey } from './lib/crypto';
+import { setPubkeyOnChain } from './lib/registry';
 
 type CryptoStatus = 'ready' | 'error';
 
@@ -41,21 +42,30 @@ export default function App() {
         const keyPair = await getOrCreateKeyPair();
         console.log('[ECDH] key pair ready');
 
-        // Register public key with backend
+        // Register public key on backend AND on-chain
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
+
+        // 1. Backend (fast, for convenience)
         try {
-          const r = await fetch('/api/user/pubkey', {
+          await fetch('/api/user/pubkey', {
             method: 'POST',
             headers: authStore.headers(),
             body: JSON.stringify({ publicKey: pubkeyStr }),
           });
-          if (r.ok) {
-            console.log('[ECDH] public key registered on backend');
-            setMyPubkeyRegistered(true);
-          }
+          console.log('[ECDH] pubkey registered on backend');
         } catch (e) {
-          console.warn('[ECDH] failed to register pubkey, will retry', e);
+          console.warn('[ECDH] backend pubkey failed', e);
         }
+
+        // 2. On-chain (decentralized trust)
+        try {
+          const txHash = await setPubkeyOnChain(pubkeyStr);
+          console.log('[ECDH] pubkey on-chain:', txHash);
+        } catch (e) {
+          console.warn('[ECDH] on-chain pubkey skipped (or not deployed yet)', e);
+        }
+
+        setMyPubkeyRegistered(true);
 
         setCryptoStatus('ready');
       } catch (err: any) {

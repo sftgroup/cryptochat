@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend, searchUsers, getGroups } from '../lib/api';
 import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, decrypt, tryDecrypt, type KeyPair, type EncryptedMessage } from '../lib/crypto';
+import { getPubkeyFromChain } from '../lib/registry';
 import { encodeTxMessage, decodeTxMessage } from '../lib/tx';
 import type { TxMessage, TransferPayload } from '../lib/tx';
 import TransferCard from '../components/TransferCard';
@@ -64,12 +65,25 @@ export default function ChatPage({ cryptoStatus, cryptoError, myAddress, myPubke
     try { setGroups(await getGroups()); } catch {}
   }
 
-  // Fetch friend's public key from backend
+  // Fetch friend's public key — on-chain first, backend fallback
   async function getFriendPubkey(address: string): Promise<JsonWebKey | null> {
+    // 1. Try on-chain (decentralized, trustless)
+    try {
+      const chainPubkey = await getPubkeyFromChain(address);
+      if (chainPubkey) {
+        console.log('[ECDH] got pubkey from chain for:', address.slice(0,10));
+        return importPublicKey(chainPubkey);
+      }
+    } catch (e) {
+      console.warn('[ECDH] chain lookup skipped:', e);
+    }
+
+    // 2. Fallback to backend
     try {
       const r = await fetch(`/api/user/pubkey/${address}`, { headers: authStore.headers() });
       if (!r.ok) return null;
       const d = await r.json();
+      console.log('[ECDH] got pubkey from backend for:', address.slice(0,10));
       return importPublicKey(d.publicKey);
     } catch {
       return null;
