@@ -6,7 +6,7 @@
  * Deployer: 0x584Ebb3e9938109bF5DD3b7eaC3a158530c5240A
  */
 
-const CONTRACT_ADDRESS = ''; // Will be filled after deployment
+const CONTRACT_ADDRESS = '0xf9ed3547370F5558e2F4516a1a9aF96A9F8506d8'; // Sepolia IdentityRegistry
 
 const ABI = [
   {
@@ -68,7 +68,7 @@ export async function getPubkeyFromChain(address: string): Promise<string | null
   }
 
   const { ethers } = await import('ethers');
-  const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
+  const provider = new ethers.JsonRpcProvider('https://ethereum-sepolia.publicnode.com');
   const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
 
   try {
@@ -87,7 +87,7 @@ export async function getPubkeysFromChain(addresses: string[]): Promise<(string 
   if (!CONTRACT_ADDRESS || addresses.length === 0) return addresses.map(() => null);
 
   const { ethers } = await import('ethers');
-  const provider = new ethers.JsonRpcProvider('https://bsc-testnet.publicnode.com');
+  const provider = new ethers.JsonRpcProvider('https://ethereum-sepolia.publicnode.com');
   const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, provider);
 
   try {
