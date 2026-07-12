@@ -4,7 +4,62 @@ import { prisma } from '../utils/prisma.js';
 
 export const dmRouter = Router();
 
-// GET /api/dm/:userId/messages — get DM history with a friend
+// GET /api/dm/inbox — get recent messages from all friends (offline sync)
+dmRouter.get('/inbox', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!.userId as string;
+
+    // Find all accepted contacts
+    const contacts = await prisma.contact.findMany({
+      where: {
+        OR: [
+          { userId: me, status: 'accepted' },
+          { contactId: me, status: 'accepted' },
+        ],
+      },
+      include: {
+        user: { select: { id: true, address: true, displayName: true, avatarUrl: true } },
+        contact: { select: { id: true, address: true, displayName: true, avatarUrl: true } },
+      },
+    });
+
+    // For each contact, fetch latest unread messages
+    const inbox: Record<string, { friend: any; unread: number; lastMessage: any | null }> = {};
+
+    for (const c of contacts) {
+      const friendId = c.userId === me ? c.contactId : c.userId;
+      const friend = c.userId === me ? c.contact : c.user;
+      if (!friend || inbox[friendId]) continue;
+
+      const unread = await prisma.message.count({
+        where: { senderId: friendId, receiverId: me, read: false },
+      });
+
+      const lastMsg = await prisma.message.findFirst({
+        where: {
+          OR: [
+            { senderId: me, receiverId: friendId },
+            { senderId: friendId, receiverId: me },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      inbox[friendId] = {
+        friend: { id: friend.id, address: friend.address, displayName: friend.displayName, avatarUrl: friend.avatarUrl },
+        unread,
+        lastMessage: lastMsg ? { content: lastMsg.content, time: lastMsg.createdAt.getTime(), sender: lastMsg.senderId } : null,
+      };
+    }
+
+    res.json({ inbox: Object.values(inbox) });
+  } catch (err) {
+    console.error('inbox error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// GET /api/dm/:userId/messages — get DM history & mark as read
 dmRouter.get('/:userId/messages', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const me = req.user!.userId as string;
@@ -21,12 +76,19 @@ dmRouter.get('/:userId/messages', authMiddleware, async (req: AuthRequest, res) 
       take: 100,
     });
 
-    res.json({ messages: messages.map((m: { id: string; senderId: string; receiverId: string; content: string; createdAt: Date }) => ({
+    // Mark received messages as read
+    await prisma.message.updateMany({
+      where: { senderId: peerId, receiverId: me, read: false },
+      data: { read: true },
+    });
+
+    res.json({ messages: messages.map(m => ({
       id: m.id,
       content: m.content,
       sender: m.senderId,
       receiver: m.receiverId,
       time: m.createdAt.getTime(),
+      read: m.read,
     }))});
   } catch (err) {
     console.error('dm messages error:', err);

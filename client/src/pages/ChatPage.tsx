@@ -14,6 +14,8 @@ interface FriendInfo { userId: string; address: string; displayName: string; ava
 interface FriendReq { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; }
 interface GroupInfo { id: string; name: string; description: string | null; members: any[]; }
 
+interface InboxEntry { friend: { id: string; address: string; displayName: string | null; avatarUrl: string | null }; unread: number; lastMessage: { content: string; time: number; sender: string } | null; }
+
 interface DmMessage { id: string; content: string; sender: string; time: number; }
 
 interface Props {
@@ -50,6 +52,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   const [addFriendMsg, setAddFriendMsg] = useState('');
   const [addFriendErr, setAddFriendErr] = useState('');
   const [searchedUsers, setSearchedUsers] = useState<any[]>([]);
+  const [inbox, setInbox] = useState<InboxEntry[]>([]);
   const [encryptionReady, setEncryptionReady] = useState(false);
   // Moments
   const [moments, setMoments] = useState<any[]>([]);
@@ -170,6 +173,11 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
     try {
       const r = await fetch('/api/moments', { headers: authStore.headers() });
       if (r.ok) { const d = await r.json(); setMoments(d.moments); }
+    } catch {}
+    // Offline inbox
+    try {
+      const ir = await fetch('/api/dm/inbox', { headers: authStore.headers() });
+      if (ir.ok) { const d = await ir.json(); setInbox(d.inbox); }
     } catch {}
 
     // Auto-fetch group keys for all my groups
@@ -544,7 +552,9 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
             {tab === 'friends' && (
               <>
                 {friends.length === 0 && <p className="text-gray-400 text-sm p-6 text-center">No friends yet.<br/><span className="text-xs">Add friends to start chatting!</span></p>}
-                {friends.map(f => { const [c1, c2] = getAvatarColor(f.displayName); return (
+                {friends.map(f => { const [c1, c2] = getAvatarColor(f.displayName);
+                  const ib = inbox.find(e => e.friend.address.toLowerCase() === f.address.toLowerCase());
+                  return (
                   <div key={f.userId} onClick={() => startDmChat(f)}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
                       activeChat?.type === 'dm' && activeChat.friend.userId === f.userId ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-gray-50'
@@ -556,6 +566,9 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                       <div className="text-gray-800 text-sm font-semibold truncate">{f.displayName}</div>
                       <div className="text-gray-400 text-xs font-mono truncate">{f.address.slice(0,6)}...{f.address.slice(-4)}</div>
                     </div>
+                    {ib && ib.unread > 0 && (
+                      <div className="bg-blue-500 text-white text-xs font-bold min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5">{ib.unread}</div>
+                    )}
                   </div>
                 );})}
               </>
