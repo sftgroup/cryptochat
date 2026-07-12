@@ -148,6 +148,14 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       console.error('[ECDH] ChatPage key pair failed:', err);
     });
     loadData();
+
+    // Poll friends & requests every 5s so that when someone else accepts our request,
+    // we see the update without manual refresh.
+    const pollFriends = setInterval(() => {
+      getFriends().then(setFriends).catch(() => {});
+      getFriendRequests().then(setRequests).catch(() => {});
+    }, 5000);
+    return () => clearInterval(pollFriends);
   }, []);
 
   async function loadData() {
