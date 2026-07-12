@@ -7,8 +7,8 @@ export const dmRouter = Router();
 // GET /api/dm/:userId/messages — get DM history with a friend
 dmRouter.get('/:userId/messages', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const me = req.user!.userId;
-    const peerId = req.params.userId;
+    const me = req.user!.userId as string;
+    const peerId = req.params.userId as string;
 
     const messages = await prisma.message.findMany({
       where: {
@@ -37,8 +37,8 @@ dmRouter.get('/:userId/messages', authMiddleware, async (req: AuthRequest, res) 
 // POST /api/dm/:userId/messages — send a DM
 dmRouter.post('/:userId/messages', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const me = req.user!.userId;
-    const peerId = req.params.userId;
+    const me = req.user!.userId as string;
+    const peerId = req.params.userId as string;
     const { content } = req.body;
 
     if (!content || typeof content !== 'string') {

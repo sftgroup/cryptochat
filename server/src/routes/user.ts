@@ -131,7 +131,7 @@ userRouter.post('/pubkey', authMiddleware, async (req: AuthRequest, res) => {
 userRouter.get('/pubkey/:address', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const user = await prisma.user.findFirst({
-      where: { address: req.params.address.toLowerCase() },
+      where: { address: (req.params.address as string).toLowerCase() },
       select: { id: true, address: true, publicKey: true, pubkeyAttestation: true },
     });
 
