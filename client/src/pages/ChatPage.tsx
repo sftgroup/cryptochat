@@ -8,6 +8,7 @@ import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessa
 import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
 import IpfsMomentContent from '../components/IpfsMomentContent';
+import EmojiPicker from '../components/EmojiPicker';
 
 interface FriendInfo { userId: string; address: string; displayName: string; avatarUrl: string | null; bio: string | null; status: string; id: string; }
 interface FriendReq { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; }
@@ -32,6 +33,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [showEmoji, setShowEmoji] = useState(false);
   const [activeChat, setActiveChat] = useState<{ type: 'dm'; friend: FriendInfo } | { type: 'group'; group: GroupInfo } | null>(null);
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [composing, setComposing] = useState('');
@@ -51,6 +53,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   const keyPairRef = useRef<KeyPair | null>(null);
   const sharedKeysRef = useRef<Map<string, CryptoKey>>(new Map());
   const groupPollRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ── Group chat helpers ────────────────────────────────────────
 
@@ -155,7 +158,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       getFriends().then(setFriends).catch(() => {});
       getFriendRequests().then(setRequests).catch(() => {});
     }, 5000);
-    return () => clearInterval(pollFriends);
+    return () => { clearInterval(pollFriends); stopPolling(); };
   }, []);
 
   async function loadData() {
@@ -282,10 +285,21 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
     if (groupPollRef.current) { clearInterval(groupPollRef.current); groupPollRef.current = undefined; }
   }
 
-  // Stop ALL polling on unmount
+  // Auto-scroll when messages change
   useEffect(() => {
-    return () => { stopPolling(); clearGroupKeyCache(); };
-  }, []);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  function formatChatTime(ts: number) {
+    const d = new Date(ts);
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    if (d.toDateString() === now.toDateString()) return hm;
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday ' + hm;
+    return `${d.getMonth()+1}/${d.getDate()} ${hm}`;
+  }
 
   const startDmChat = useCallback(async (friend: FriendInfo) => {
     setRightPanel(null);
@@ -694,7 +708,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
               </div>
 
               {/* Messages area */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
                 {messages.length === 0 && (
                   <div className="text-center py-12">
                     <div className="text-5xl mb-4">🔐</div>
@@ -705,29 +719,56 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                   const txMsg = (activeChat.type === 'dm') ? decodeTxMessage(msg.content || '') : null;
                   const isSent = msg.sender === user.userId;
                   return (
-                    <div key={msg.id || i} className={`flex ${isSent ? 'justify-end' : 'justify-start'}`}>
-                      {txMsg ? (
-                        <TransferCard payload={txMsg.payload} isSent={isSent} />
-                      ) : (
-                        <div className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                          isSent ? 'bg-blue-500 text-white rounded-br-md shadow-sm' : 'bg-white text-gray-800 rounded-bl-md shadow-sm border border-gray-100'
-                        }`}>{msg.content}</div>
-                      )}
+                    <div key={msg.id || i} className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
+                      {/* Avatar */}
+                      <div className="shrink-0">
+                        {(() => {
+                          if (activeChat.type === 'dm') {
+                            const name = isSent ? (user.displayName || myAddress) : activeChat.friend.displayName;
+                            const [c1, c2] = getAvatarColor(name);
+                            return <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>{getAvatarLetter(name)}</div>;
+                          }
+                          const addr = isSent ? (user.displayName || myAddress) : (msg.sender || '?');
+                          const [c1, c2] = getAvatarColor(addr);
+                          return <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>{getAvatarLetter(addr)}</div>;
+                        })()}
+                      </div>
+                      {/* Message bubble */}
+                      <div className={isSent ? 'flex flex-col items-end' : ''} style={{maxWidth:'65%'}}>
+                        {txMsg ? (
+                          <TransferCard payload={txMsg.payload} isSent={isSent} />
+                        ) : (
+                          <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                            isSent ? 'bg-blue-500 text-white rounded-br-md shadow-sm' : 'bg-white text-gray-800 rounded-bl-md shadow-sm border border-gray-100'
+                          }`}>{msg.content}</div>
+                        )}
+                        <span className="text-[10px] text-gray-400 mt-0.5 px-1">{formatChatTime(msg.time)}</span>
+                      </div>
                     </div>
                   );
                 })}
+                <div ref={messagesEndRef} />
               </div>
 
-              {/* Input area — distinct card */}
-              <div className="bg-white border-t border-gray-200 p-3 space-y-2">
-                <div className="flex gap-2">
-                  <button onClick={() => { setShowTransfer(true); }}
-                    className="text-red-500 text-xs bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-full transition-colors font-semibold border border-red-200">🧧 Red Packet</button>
-                  <label className="text-blue-500 text-xs bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-full transition-colors font-semibold cursor-pointer border border-blue-200">
-                    📎 File
+              {/* Input area — WeChat style */}
+              <div className="bg-white border-t border-gray-200 p-3">
+                {showTransfer && <div className="mb-2"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>}
+                <div className="flex gap-2 items-end relative">
+                  {/* Emoji button */}
+                  <div className="relative shrink-0">
+                    <button onClick={() => setShowEmoji(!showEmoji)}
+                      className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-lg cursor-pointer" title="Emoji">
+                      😊
+                    </button>
+                    {showEmoji && (
+                      <EmojiPicker onSelect={e => setComposing(prev => prev + e)} onClose={() => setShowEmoji(false)} />
+                    )}
+                  </div>
+                  {/* File button */}
+                  <label className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer shrink-0" title="Send File">
+                    📎
                     <input type="file" className="hidden" onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
+                      const file = e.target.files?.[0]; if (!file) return;
                       try {
                         setComposing(prev => prev + `\n[Uploading: ${file.name}...]`);
                         const buf = await file.arrayBuffer();
@@ -739,14 +780,16 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                       e.target.value = '';
                     }} />
                   </label>
-                </div>
-                {showTransfer && <TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} />}
-                <div className="flex gap-2 items-end">
+                  {/* Text input */}
                   <input type="text" value={composing} onChange={e => setComposing(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && composing.trim() && !showTransfer) { sendMessage(); } }}
                     placeholder="Type a message..." className="flex-1 bg-gray-100 border-none outline-none text-gray-800 text-sm placeholder-gray-400 py-2.5 px-3 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-200 transition-all" />
+                  {/* Red Packet button */}
+                  <button onClick={() => { setShowTransfer(true); }}
+                    className="shrink-0 text-xl text-orange-400 hover:text-orange-500 hover:bg-orange-50 w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer" title="Red Packet">🧧</button>
+                  {/* Send button */}
                   <button onClick={sendMessage} disabled={!composing.trim()}
-                    className="bg-blue-500 text-white font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-blue-600 disabled:opacity-50 shrink-0 transition-colors">Send</button>
+                    className="bg-blue-500 text-white font-bold text-sm px-4 py-2 rounded-xl hover:bg-blue-600 disabled:opacity-50 shrink-0 transition-colors">Send</button>
                 </div>
               </div>
             </>
