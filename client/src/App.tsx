@@ -6,7 +6,7 @@ import ProfilePage from './pages/ProfilePage';
 import CeresMintPage from './pages/CeresMintPage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey } from './lib/crypto';
-import { checkCeresDID, registerPubkey } from './lib/registry';
+import { checkCeresDID } from './lib/registry';
 
 export default function App() {
   const { isConnected, address } = useAccount();
@@ -67,17 +67,12 @@ export default function App() {
         }
         setCeresChecked(true);
 
-        // 2. Generate ECDH key pair + register pubkey on backend
+        // 2. Generate ECDH key pair (pubkey will be stored on-chain when DID is minted)
         const keyPair = await getOrCreateKeyPair();
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
         setPubkeyJson(pubkeyStr);
-        try {
-          await registerPubkey(pubkeyStr);
-          setPubkeyRegistered(true);
-          console.log('[ECDH] pubkey registered on backend ✅');
-        } catch (e) {
-          console.warn('[ECDH] pubkey registration failed:', e);
-        }
+        setPubkeyRegistered(true);
+        console.log('[ECDH] key pair ready');
       } catch (err: any) {
         console.error('[Init] error:', err);
       }

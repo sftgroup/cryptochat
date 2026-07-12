@@ -82,20 +82,6 @@ export async function hasCeresDID(address: string): Promise<boolean> {
 }
 
 // ── Pubkey（关联到 Ceres DID，存储在后台） ──
-/** @deprecated — use getPubkey() below instead */
-export async function getPubkeyOnlyBackend(address: string): Promise<string | null> {
-  try {
-    const { authStore } = await import('./api');
-    const r = await fetch(`/api/user/pubkey/${address}`, {
-      headers: authStore.headers(),
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.publicKey || null;
-  } catch (err) {
-    return null;
-  }
-}
 
 /**
  * 从 CeresDID 链上查询用户 ECDH 公钥。
@@ -165,25 +151,12 @@ export async function getPubkeyOnChain(address: string): Promise<string | null> 
 }
 
 /**
- * 获取用户公钥 — 优先炼上 CeresDID，fallback 到后台。
+ * 获取用户公钥 — 纯链上查询 CeresDID。
+ * 所有用户加入 CryptChat 必须先铸造 Ceres DID，铸造时 pubkey 已写入链上 urls。
+ * 不需要后台 fallback。
  */
 export async function getPubkey(address: string): Promise<string | null> {
-  // 1. Try chain (CeresDID profiles)
-  const chainPubkey = await getPubkeyOnChain(address);
-  if (chainPubkey) return chainPubkey;
-
-  // 2. Fallback to backend
-  try {
-    const { authStore } = await import('./api');
-    const r = await fetch(`/api/user/pubkey/${address}`, {
-      headers: authStore.headers(),
-    });
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d.publicKey || null;
-  } catch (err) {
-    return null;
-  }
+  return getPubkeyOnChain(address);
 }
 
 /**
