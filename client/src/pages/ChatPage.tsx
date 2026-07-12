@@ -346,7 +346,11 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       const { setPubkeyOnChain } = await import('../lib/registry');
       const { exportPublicKey, getOrCreateKeyPair } = await import('../lib/crypto');
       const kp = await getOrCreateKeyPair();
-      await setPubkeyOnChain(exportPublicKey(kp.publicKey));
+      const result = await setPubkeyOnChain(exportPublicKey(kp.publicKey));
+      if (result === 'already-registered') {
+        onPubkeyRegistered();
+        return true;
+      }
       onPubkeyRegistered();
       setAddFriendMsg('✅ Identity registered on-chain!');
       return true;
