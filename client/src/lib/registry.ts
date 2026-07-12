@@ -58,8 +58,7 @@ export async function setPubkeyOnChain(pubkeyJson: string): Promise<string> {
       functionName: 'setPubkey',
       args: [pubkeyBytes],
       chain: config.chains[0],
-      account: walletClient.account,
-    });
+    } as any);
   } catch (simErr: any) {
     const reason = typeof simErr === 'string' ? simErr : simErr?.message || String(simErr);
     console.error('[Registry] simulate setPubkey failed:', reason);
