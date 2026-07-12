@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend, searchUsers, getGroups } from '../lib/api';
 import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, tryDecrypt, type KeyPair } from '../lib/crypto';
-import { getPubkeyFromChain } from '../lib/registry';
+import { getPubkey } from '../lib/registry';
 import { decodeTxMessage } from '../lib/tx';
 import type { TransferPayload } from '../lib/tx';
 import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessage } from '../lib/groupKeys';
@@ -18,12 +18,12 @@ interface DmMessage { id: string; content: string; sender: string; time: number;
 
 interface Props {
   myAddress: string;
-  myPubkeyRegistered: boolean;
-  onPubkeyRegistered: () => void;
+  ceresDID: { hasDID: boolean; inviter: string | null; inviteeCount: number; chainId: number | null };
+  pubkeyRegistered: boolean;
   onGoProfile: () => void;
 }
 
-export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegistered, onGoProfile }: Props) {
+export default function ChatPage({ myAddress, ceresDID: _ceresDID, pubkeyRegistered, onGoProfile }: Props) {
   const user = authStore.user!;
   const [tab, setTab] = useState<'friends' | 'groups' | 'moments' | 'requests'>('friends');
   const [friends, setFriends] = useState<FriendInfo[]>([]);
@@ -170,29 +170,18 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
     } catch {}
   }
 
-  // Fetch friend's public key — on-chain first, backend fallback
+  // Fetch friend's public key — Ceres DID backend lookup (no chain RPC)
   async function getFriendPubkey(address: string): Promise<JsonWebKey | null> {
-    // 1. Try on-chain (decentralized, trustless)
     try {
-      const result = await getPubkeyFromChain(address);
-      if (result.pubkey) {
-        console.log('[ECDH] got pubkey from chain for:', address.slice(0,10));
-        return importPublicKey(result.pubkey);
+      const pubkey = await getPubkey(address);
+      if (pubkey) {
+        console.log('[ECDH] got pubkey from backend for:', address.slice(0,10));
+        return importPublicKey(pubkey);
       }
     } catch (e) {
-      console.warn('[ECDH] chain lookup skipped:', e);
+      console.warn('[ECDH] pubkey lookup failed:', e);
     }
-
-    // 2. Fallback to backend
-    try {
-      const r = await fetch(`/api/user/pubkey/${address}`, { headers: authStore.headers() });
-      if (!r.ok) return null;
-      const d = await r.json();
-      console.log('[ECDH] got pubkey from backend for:', address.slice(0,10));
-      return importPublicKey(d.publicKey);
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   // Get or derive shared key with a friend
@@ -352,49 +341,9 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
 
   async function sendTransfer(_payload: TransferPayload) { setShowTransfer(false); }
 
-  /**
-   * Ensure pubkey is registered on-chain before any social action.
-   * Blocks with a clear error message if gas is insufficient or user rejects.
-   */
-  async function ensurePubkeyOnChain(): Promise<boolean> {
-    if (myPubkeyRegistered) return true;
-
-    setAddFriendErr('');
-    setAddFriendMsg('⛽ Identity not yet on-chain. One-time gas required.');
-
-    try {
-      const { setPubkeyOnChain } = await import('../lib/registry');
-      const { exportPublicKey, getOrCreateKeyPair } = await import('../lib/crypto');
-      const kp = await getOrCreateKeyPair();
-      const result = await setPubkeyOnChain(exportPublicKey(kp.publicKey));
-      if (result === 'already-registered') {
-        onPubkeyRegistered();
-        return true;
-      }
-      onPubkeyRegistered();
-      setAddFriendMsg('✅ Identity registered on-chain!');
-      return true;
-    } catch (err: any) {
-      const msg = err?.message || String(err);
-      if (msg.includes('insufficient funds') || msg.includes('Insufficient')) {
-        setAddFriendErr('❌ Insufficient Sepolia ETH for gas. Get free test ETH from faucet.quicknode.com/ethereum/sepolia');
-      } else if (msg.includes('rejected') || msg.includes('denied') || msg.includes('User')) {
-        setAddFriendErr('❌ Transaction rejected. You must register on-chain before adding friends.');
-      } else {
-        setAddFriendErr('❌ ' + msg);
-      }
-      setAddFriendMsg('');
-      return false;
-    }
-  }
-
   async function handleAddFriend() {
     setAddFriendErr(''); setAddFriendMsg('');
     if (!addFriendAddr.trim()) return;
-
-    // Must register on-chain first
-    const ok = await ensurePubkeyOnChain();
-    if (!ok) return;
 
     try {
       const result = await sendFriendRequest(addFriendAddr.trim());
@@ -413,7 +362,6 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   async function handleCreateGroup() {
     if (!newGroupName.trim()) return;
 
-    // Groups use backend pubkey exchange (no on-chain required)
     setCreatingGroup(true);
     try {
       const r = await fetch('/api/groups', { method: 'POST', headers: authStore.headers(),
@@ -459,7 +407,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   const shortAddr = myAddress ? `${myAddress.slice(0, 6)}...${myAddress.slice(-4)}` : '';
 
   // Crypto status indicator
-  const cryptoReady = encryptionReady && myPubkeyRegistered;
+  const cryptoReady = encryptionReady && pubkeyRegistered;
 
   return (
     <div className="h-screen flex flex-col bg-[#e8eaed] overflow-hidden" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'}}>

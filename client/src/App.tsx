@@ -5,6 +5,7 @@ import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey } from './lib/crypto';
+import { checkCeresDID, registerPubkey } from './lib/registry';
 
 export default function App() {
   const { isConnected, address } = useAccount();
@@ -12,13 +13,19 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => !!authStore.token);
   const [page, setPage] = useState<'chat' | 'profile'>('chat');
   const [myAddress, setMyAddress] = useState('');
-  const [myPubkeyRegistered, setMyPubkeyRegistered] = useState(false);
+  const [ceresDID, setCeresDID] = useState<{
+    hasDID: boolean;
+    inviter: string | null;
+    inviteeCount: number;
+    chainId: number | null;
+  }>({ hasDID: false, inviter: null, inviteeCount: 0, chainId: null });
+  const [pubkeyRegistered, setPubkeyRegistered] = useState(false);
 
   function handleLogin() {
     setLoggedIn(true);
   }
 
-  // On login: generate key pair + register pubkey on backend (fast, no gas)
+  // On login: generate key pair + register pubkey + check Ceres DID
   useEffect(() => {
     if (!loggedIn || !authStore.user) return;
 
@@ -29,45 +36,39 @@ export default function App() {
         if (!addr) return;
         if (cancelled) return;
         setMyAddress(addr);
-        console.log('[ECDH] wallet:', addr);
 
-        // Generate ECDH key pair
+        // 1. Check Ceres DID status
+        try {
+          const profile = await checkCeresDID(addr);
+          if (profile) {
+            setCeresDID({
+              hasDID: profile.invited,
+              inviter: profile.inviter,
+              inviteeCount: profile.inviteeCount,
+              chainId: profile.chainId,
+            });
+            console.log('[Ceres] DID status:', profile.invited ? `✅ (invited by ${profile.inviter?.slice(0,10)}...)` : '⚠️ not yet cast');
+          }
+        } catch (e) {
+          console.warn('[Ceres] DID check failed:', e);
+        }
+
+        // 2. Generate ECDH key pair + register pubkey on backend
         const keyPair = await getOrCreateKeyPair();
-        console.log('[ECDH] key pair ready');
-
-        // Register on backend
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
         try {
-          await fetch('/api/user/pubkey', {
-            method: 'POST',
-            headers: authStore.headers(),
-            body: JSON.stringify({ publicKey: pubkeyStr }),
-          });
-          console.log('[ECDH] pubkey registered on backend');
+          await registerPubkey(pubkeyStr);
+          setPubkeyRegistered(true);
+          console.log('[ECDH] pubkey registered on backend ✅');
         } catch (e) {
-          console.warn('[ECDH] backend pubkey failed', e);
-        }
-
-        // Check on-chain (non-blocking — groups work without it)
-        try {
-          const { hasPubkeyOnChain } = await import('./lib/registry');
-          const alreadyOnChain = await hasPubkeyOnChain(addr);
-          if (alreadyOnChain) {
-            console.log('[ECDH] pubkey already on-chain');
-          }
-          setMyPubkeyRegistered(alreadyOnChain);
-        } catch {
-          console.log('[ECDH] chain check skipped (RPC/contract unavailable)');
-          setMyPubkeyRegistered(false);
+          console.warn('[ECDH] pubkey registration failed:', e);
         }
       } catch (err: any) {
-        console.error('[ECDH] init error:', err);
+        console.error('[Init] error:', err);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [loggedIn]);
 
   // Auto-logout if wallet disconnects
@@ -83,7 +84,8 @@ export default function App() {
     setLoggedIn(false);
     setPage('chat');
     setMyAddress('');
-    setMyPubkeyRegistered(false);
+    setPubkeyRegistered(false);
+    setCeresDID({ hasDID: false, inviter: null, inviteeCount: 0, chainId: null });
   }
 
   if (!loggedIn) return <LoginPage onLogin={handleLogin} />;
@@ -94,8 +96,8 @@ export default function App() {
   return (
     <ChatPage
       myAddress={myAddress}
-      myPubkeyRegistered={myPubkeyRegistered}
-      onPubkeyRegistered={() => setMyPubkeyRegistered(true)}
+      ceresDID={ceresDID}
+      pubkeyRegistered={pubkeyRegistered}
       onGoProfile={() => setPage('profile')}
     />
   );

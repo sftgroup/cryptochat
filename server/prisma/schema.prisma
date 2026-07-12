@@ -1,0 +1,154 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(uuid())
+  address     String   @unique
+  ensName     String?
+  avatarUrl   String?
+  displayName String?
+  bio         String?
+  publicKey   String?
+  pubkeyAttestation String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions      Session[]
+  contacts      Contact[]    @relation("UserContacts")
+  contactOf     Contact[]    @relation("ContactOf")
+  groupMembers  GroupMember[]
+  createdGroups Group[]      @relation("GroupCreator")
+  groupKeyEnvelopes GroupKeyEnvelope[]
+
+  @@index([address])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  token        String   @unique
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Nonce {
+  id        String   @id @default(uuid())
+  address   String
+  nonce     String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([address, nonce])
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserContacts", fields: [userId], references: [id])
+  contactId String
+  contact   User     @relation("ContactOf", fields: [contactId], references: [id])
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+
+  @@unique([userId, contactId])
+  @@index([userId])
+  @@index([contactId])
+}
+
+model Message {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  content     String
+  messageType String   @default("text")
+  metadata    String?
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, createdAt])
+}
+
+model Group {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  avatarUrl   String?
+  xmtpGroupId String?
+  inviteCode  String?  @unique
+  creatorId   String
+  creator     User     @relation("GroupCreator", fields: [creatorId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     GroupMember[]
+  messages    GroupMessage[]
+  keyEnvelopes GroupKeyEnvelope[]
+
+  @@index([xmtpGroupId])
+  @@index([inviteCode])
+}
+
+model GroupMember {
+  id       String   @id @default(uuid())
+  groupId  String
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User     @relation(fields: [userId], references: [id])
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId])
+}
+
+model GroupKeyEnvelope {
+  id           String   @id @default(uuid())
+  groupId      String
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  encryptedKey String
+  iv           String
+  version      Int      @default(1)
+  createdAt    DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([groupId])
+}
+
+model GroupMessage {
+  id          String   @id @default(uuid())
+  groupId     String
+  group       Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderId    String
+  content     String
+  messageType String   @default("text")
+  metadata    String?
+  keyVersion  Int      @default(1) // which group key version was used to encrypt
+  createdAt   DateTime @default(now())
+
+  @@index([groupId, createdAt])
+}
+
+model Moment {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
