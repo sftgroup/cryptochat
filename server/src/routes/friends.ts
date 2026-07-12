@@ -28,7 +28,7 @@ friendsRouter.get('/', async (req: AuthRequest, res) => {
     });
 
     // Normalize: always return the OTHER person's info
-    const friends = contacts.map((c: { userId: string; contactId: string; user?: any; contact?: any }) => {
+    const friends = contacts.map((c: Record<string, any>) => {
       const isMe = c.userId === userId;
       const friend = isMe ? c.contact : c.user;
       return {
