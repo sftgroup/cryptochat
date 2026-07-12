@@ -458,23 +458,23 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   return (
     <div className="h-screen flex flex-col bg-[#e8eaed] overflow-hidden" style={{fontFamily:'-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif'}}>
       {/* ═══ TOP BAR ═══ */}
-      <header className="flex items-center justify-between px-5 flex-shrink-0 bg-white border-b border-gray-200" style={{height:52}}>
+      <header className="flex items-center justify-between px-5 flex-shrink-0 border-b border-gray-200" style={{height:52,background:'linear-gradient(135deg,#dce8f5,#c5ddf0)'}}>
         <div className="flex items-center gap-3">
           <div className="text-xl">🔐</div>
           <h1 className="text-gray-900 font-bold text-base tracking-tight">CryptChat</h1>
           {cryptoReady ? (
-            <span className="text-emerald-600 text-[11px] bg-emerald-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-emerald-200">
+            <span className="text-emerald-600 text-[11px] bg-white/70 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-emerald-200">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> E2EE
             </span>
           ) : (
-            <span className="text-amber-600 text-[11px] bg-amber-50 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-amber-200">
+            <span className="text-amber-600 text-[11px] bg-white/70 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 border border-amber-200">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Initializing...
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={onGoProfile}
-            className="flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-full px-3 py-1.5 transition-all cursor-pointer" title="View Profile">
+            className="flex items-center gap-2 bg-white/70 hover:bg-white border border-gray-200 rounded-full px-3 py-1.5 transition-all cursor-pointer" title="View Profile">
             <span className={`w-2 h-2 rounded-full ${cryptoReady ? 'bg-emerald-500' : 'bg-amber-400 animate-pulse'}`} />
             {(() => { const [c1, c2] = getAvatarColor(user.displayName || user.address); return (
               <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>
