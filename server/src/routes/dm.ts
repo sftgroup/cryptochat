@@ -124,6 +124,10 @@ dmRouter.post('/:userId/messages', authMiddleware, async (req: AuthRequest, res)
       data: { senderId: me, receiverId: peerId, content: content.slice(0, 5000) },
     });
 
+    // Real-time push to receiver
+    const { pushEvent } = await import('../index.js');
+    pushEvent(peerId, { type: 'new_dm', payload: { senderId: me } });
+
     res.json({ message: {
       id: message.id,
       content: message.content,

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import { authRouter } from './routes/auth.js';
 import { userRouter } from './routes/user.js';
 import { txRouter } from './routes/tx.js';
@@ -38,8 +39,50 @@ app.get('/api/health', (_req, res) => {
 
 const server = createServer(app);
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔐 CryptChat API listening on :${PORT}`);
+// ── WebSocket server for real-time push ──
+
+const wss = new WebSocketServer({ server, path: '/ws' });
+
+const clients = new Map<string, Set<WebSocket>>();
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url || '', `http://${req.headers.host}`);
+  const token = url.searchParams.get('token');
+  const userId = url.searchParams.get('userId');
+
+  if (!token || !userId) {
+    ws.close(4001, 'Missing token or userId');
+    return;
+  }
+
+  if (!clients.has(userId)) clients.set(userId, new Set());
+  clients.get(userId)!.add(ws);
+  console.log(`[WS] connected: ${userId.slice(0, 10)}... (${clients.size} users)`);
+
+  ws.on('close', () => {
+    const set = clients.get(userId);
+    if (set) {
+      set.delete(ws);
+      if (set.size === 0) clients.delete(userId);
+    }
+  });
 });
 
-export { app, server };
+export function pushEvent(userId: string, event: { type: string; payload?: any }) {
+  const set = clients.get(userId);
+  if (!set || set.size === 0) return false;
+
+  const data = JSON.stringify({ ...event, ts: Date.now() });
+  for (const ws of set) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(data);
+    }
+  }
+  return true;
+}
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🔐 CryptChat API listening on :${PORT} + WS /ws`);
+});
+
+export { app, server, clients };

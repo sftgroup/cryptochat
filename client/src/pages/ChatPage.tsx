@@ -163,6 +163,17 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
       getFriends().then(setFriends).catch(() => {});
       getFriendRequests().then(setRequests).catch(() => {});
     }, 5000);
+
+    // WebSocket real-time push
+    const user = authStore.user;
+    if (user) {
+      try {
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${proto}//${location.hostname}:4089/ws?token=${encodeURIComponent(authStore.token!)}&userId=${encodeURIComponent(user.id)}`);
+        ws.onmessage = () => { loadData(); };
+      } catch { /* ws not available */ }
+    }
+
     return () => { clearInterval(pollFriends); stopPolling(); };
   }, []);
 

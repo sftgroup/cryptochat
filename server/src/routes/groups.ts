@@ -294,6 +294,16 @@ groupRouter.post('/:id/messages', async (req: AuthRequest, res) => {
     const msg = await prisma.groupMessage.create({
       data: { groupId, senderId: req.user!.userId, content: req.body.content, messageType: req.body.messageType || 'text', metadata: req.body.metadata || null, keyVersion: req.body.keyVersion || 1 },
     });
+
+    // Real-time push to all group members
+    const members = await prisma.groupMember.findMany({ where: { groupId } });
+    const { pushEvent } = await import('../index.js');
+    for (const m of members) {
+      if (m.userId !== req.user!.userId) {
+        pushEvent(m.userId, { type: 'new_group_msg', payload: { groupId } });
+      }
+    }
+
     res.status(201).json({ message: msg });
   } catch (err) {
     console.error('send group msg:', err);
