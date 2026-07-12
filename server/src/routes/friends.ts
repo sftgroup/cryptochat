@@ -62,7 +62,7 @@ friendsRouter.get('/requests', async (req: AuthRequest, res) => {
     });
 
     res.json({
-      requests: requests.map((r: { id: string; fromId: string; toId: string; status: string; createdAt: Date }) => ({
+      requests: requests.map((r: { id: string; fromId: string; toId: string; status: string; createdAt: Date; user?: { id: string; address: string; displayName?: string; avatarUrl?: string } }) => ({
         id: r.id,
         userId: r.user.id,
         address: r.user.address,
