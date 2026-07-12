@@ -64,7 +64,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       const creatorAddress = creatorMember?.user?.address || '';
 
       if (keyPairRef.current) {
-        await fetchMyGroupKey(group.id, creatorAddress, keyPairRef.current, user.userId);
+        await fetchMyGroupKey(group.id, creatorAddress, keyPairRef.current, user.id);
       }
 
       const r = await fetch(`/api/groups/${group.id}/messages`, { headers: authStore.headers() });
@@ -116,7 +116,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
     const tempId = 'local-group-' + Date.now();
 
     // Optimistic: show message immediately
-    setMessages(prev => [...prev, { id: tempId, content: plaintext, sender: user.userId, time: Date.now() }]);
+    setMessages(prev => [...prev, { id: tempId, content: plaintext, sender: user.id, time: Date.now() }]);
 
     try {
       const { content: encrypted, keyVersion } = await encryptGroupMessage(plaintext, activeChat.group.id);
@@ -128,7 +128,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       if (r.ok) {
         const d = await r.json();
         if (d.message) {
-          setMessages(prev => prev.map(m => m.id === tempId ? { id: d.message.id, content: plaintext, sender: user.userId, time: new Date(d.message.createdAt).getTime() } : m));
+          setMessages(prev => prev.map(m => m.id === tempId ? { id: d.message.id, content: plaintext, sender: user.id, time: new Date(d.message.createdAt).getTime() } : m));
         }
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempId));
@@ -209,7 +209,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
     const sharedKey = await deriveSharedKey(
       keyPairRef.current,
       peerPubkey,
-      user.userId,
+      user.id,
       friendAddr.toLowerCase()
     );
 
@@ -305,7 +305,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
     const tempId = 'local-' + Date.now();
 
     // Optimistic: show message immediately
-    setMessages(prev => [...prev, { id: tempId, content: plaintext, sender: user.userId, time: Date.now() }]);
+    setMessages(prev => [...prev, { id: tempId, content: plaintext, sender: user.id, time: Date.now() }]);
 
     let content = plaintext;
     // Encrypt if we have a shared key
@@ -328,7 +328,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
         const d = await r.json();
         if (d.message) {
           // Replace temp message with real server message
-          setMessages(prev => prev.map(m => m.id === tempId ? { id: d.message.id, content: plaintext, sender: user.userId, time: d.message.time } : m));
+          setMessages(prev => prev.map(m => m.id === tempId ? { id: d.message.id, content: plaintext, sender: user.id, time: d.message.time } : m));
         }
       } else {
         // Remove optimistic message on failure
@@ -423,7 +423,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       if (d.group && keyPairRef.current) {
         const members = d.group.members?.map((m: any) => ({ userId: m.userId, address: m.user?.address || '' })) || [];
         try {
-          await setupGroupKeys(d.group.id, members, keyPairRef.current, user.userId);
+          await setupGroupKeys(d.group.id, members, keyPairRef.current, user.id);
         } catch (e) { console.warn('[GroupKeys] setup failed:', e); }
       }
 
@@ -711,7 +711,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                 )}
                 {messages.map((msg, i) => {
                   const txMsg = (activeChat.type === 'dm') ? decodeTxMessage(msg.content || '') : null;
-                  const isSent = msg.sender === user.userId;
+                  const isSent = msg.sender === user.id;
                   return (
                     <div key={msg.id || i} className={`flex items-end gap-2 ${isSent ? 'flex-row-reverse' : ''}`}>
                       {/* Avatar */}
