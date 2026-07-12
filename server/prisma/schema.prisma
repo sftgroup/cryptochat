@@ -144,11 +144,35 @@ model GroupMessage {
 }
 
 model Moment {
+  id        String    @id @default(uuid())
+  userId    String
+  content   String
+  createdAt DateTime  @default(now())
+  likes     MomentLike[]
+  comments  MomentComment[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model MomentLike {
   id        String   @id @default(uuid())
+  momentId  String
+  moment    Moment   @relation(fields: [momentId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([momentId, userId])
+  @@index([momentId])
+}
+
+model MomentComment {
+  id        String   @id @default(uuid())
+  momentId  String
+  moment    Moment   @relation(fields: [momentId], references: [id], onDelete: Cascade)
   userId    String
   content   String
   createdAt DateTime @default(now())
 
-  @@index([userId])
-  @@index([createdAt])
+  @@index([momentId, createdAt])
 }

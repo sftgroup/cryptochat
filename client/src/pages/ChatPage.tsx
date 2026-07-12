@@ -683,6 +683,46 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                     <div className="text-gray-700 text-sm pl-10">
                       {m.content?.startsWith('ipfs://') ? <IpfsMomentContent cid={m.content.replace('ipfs://', '')} /> : m.content}
                     </div>
+                    {/* Like & Comment actions */}
+                    <div className="flex items-center gap-4 pl-10 mt-2 pt-2 border-t border-gray-100">
+                      <button onClick={async () => {
+                        try {
+                          const r = await fetch(`/api/moments/${m.id}/like`, { method: 'POST', headers: authStore.headers() });
+                          if (r.ok) {
+                            const d = await r.json();
+                            const l = (m.likes || []).filter((id: string) => id !== authStore.user?.userId);
+                            const newLikes = d.liked ? [...l, authStore.user!.userId] : l;
+                            setMoments(prev => prev.map(x => x.id === m.id ? { ...x, liked: d.liked, likes: newLikes } : x));
+                          }
+                        } catch {}
+                      }}
+                        className={`flex items-center gap-1 text-xs font-medium transition-colors ${m.liked ? 'text-red-500' : 'text-gray-400 hover:text-red-400'}`}>
+                        {m.liked ? '❤️' : '🤍'} <span>{(m.likes || []).length || ''}</span>
+                      </button>
+                      <button onClick={() => {
+                        const text = prompt('Add a comment:');
+                        if (!text?.trim()) return;
+                        fetch(`/api/moments/${m.id}/comment`, { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ content: text.trim() }) })
+                          .then(r => r.ok ? r.json() : Promise.reject())
+                          .then(d => {
+                            setMoments(prev => prev.map(x => x.id === m.id ? { ...x, comments: [...(x.comments || []), d.comment] } : x));
+                          }).catch(() => {});
+                      }}
+                        className="flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-blue-500 transition-colors">
+                        💬 <span>{(m.comments || []).length || ''}</span>
+                      </button>
+                    </div>
+                    {/* Comments list */}
+                    {(m.comments || []).length > 0 && (
+                      <div className="pl-10 mt-2 space-y-1">
+                        {m.comments.map((c: any, ci: number) => (
+                          <div key={c.id || ci} className="text-xs">
+                            <span className="text-gray-800 font-medium">{c.authorName || 'User'}</span>
+                            <span className="text-gray-500 ml-1">{c.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
