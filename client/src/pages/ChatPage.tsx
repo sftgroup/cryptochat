@@ -4,7 +4,7 @@ import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, tryDecry
 import { getPubkeyFromChain } from '../lib/registry';
 import { decodeTxMessage } from '../lib/tx';
 import type { TransferPayload } from '../lib/tx';
-import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessage, clearGroupKeyCache } from '../lib/groupKeys';
+import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessage } from '../lib/groupKeys';
 import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
 import IpfsMomentContent from '../components/IpfsMomentContent';
