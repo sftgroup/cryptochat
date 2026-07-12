@@ -41,6 +41,8 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   const [rightPanel, setRightPanel] = useState<'add_friend' | 'join_group' | 'info' | null>(null);
   const [joinByCodeMode, setJoinByCodeMode] = useState(false);
   const [groupInviteCode, setGroupInviteCode] = useState('');
+  const [newGroupCreated, setNewGroupCreated] = useState<{ id: string; name: string; code: string } | null>(null);
+  const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
   const [addFriendAddr, setAddFriendAddr] = useState('');
   const [addFriendMsg, setAddFriendMsg] = useState('');
   const [addFriendErr, setAddFriendErr] = useState('');
@@ -135,7 +137,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       } else {
         setMessages(prev => prev.filter(m => m.id !== tempId));
       }
-    } catch (err) { console.error('send group msg:', err); }
+    } catch (err: any) { console.error('send group msg:', err); alert(err?.message || 'Failed to send message'); }
   }
 
   // Init ECDH key pair
@@ -430,6 +432,11 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       }
 
       loadData(); setNewGroupName(''); setNewGroupDesc(''); setShowCreateGroup(false);
+      // Auto-generate invite code for new group and show it
+      try {
+        const ir = await fetch(`/api/groups/${d.group.id}/invite-code`, { method: 'POST', headers: authStore.headers() });
+        if (ir.ok) { const idata = await ir.json(); setGroupInviteCode(idata.inviteCode); setNewGroupCreated({ id: d.group.id, name: d.group.name, code: idata.inviteCode }); }
+      } catch {}
     } catch {}
     setCreatingGroup(false);
   }
@@ -551,6 +558,29 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                       className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
                     <button onClick={handleCreateGroup} disabled={creatingGroup || !newGroupName.trim()}
                       className="w-full bg-blue-500 text-white font-bold text-sm py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors">Create Group</button>
+                  </div>
+                )}
+
+                {/* New Group Created Modal */}
+                {newGroupCreated && (
+                  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setNewGroupCreated(null)}>
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-[360px] max-w-[90vw]" onClick={e => e.stopPropagation()}>
+                      <div className="text-center mb-4">
+                        <div className="text-5xl mb-3">🎉</div>
+                        <h3 className="text-gray-800 text-lg font-bold">{newGroupCreated.name}</h3>
+                        <p className="text-gray-500 text-sm mt-1">Group created! Share the invite code:</p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 text-center">
+                        <code className="text-blue-800 font-mono font-bold text-3xl tracking-[0.3em] select-all">{newGroupCreated.code}</code>
+                        <p className="text-gray-500 text-xs mt-2">Others can join with this 6-character code</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => { navigator.clipboard.writeText(newGroupCreated.code); alert('Copied!'); }}
+                          className="flex-1 bg-blue-500 text-white font-bold text-sm py-2.5 rounded-lg hover:bg-blue-600 transition-colors">Copy Code</button>
+                        <button onClick={() => setNewGroupCreated(null)}
+                          className="flex-1 bg-gray-100 text-gray-700 font-bold text-sm py-2.5 rounded-lg hover:bg-gray-200 transition-colors">Close</button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
@@ -907,11 +937,14 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                       </>
                     ) : (
                       <button onClick={async () => {
+                        setInviteCodeLoading(true);
                         try {
                           const res = await fetch(`/api/groups/${activeChat.group.id}/invite-code`, { method: 'POST', headers: authStore.headers() });
                           if (res.ok) { const d = await res.json(); setGroupInviteCode(d.inviteCode); }
-                        } catch {}
-                      }} className="w-full bg-blue-500 text-white font-bold text-sm py-2 rounded-lg hover:bg-blue-600 transition-colors">Generate Invite Code</button>
+                          else { const d = await res.json(); alert(d.error || 'Failed to generate invite code'); }
+                        } catch { alert('Network error'); }
+                        setInviteCodeLoading(false);
+                      }} disabled={inviteCodeLoading} className="w-full bg-blue-500 text-white font-bold text-sm py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors">{inviteCodeLoading ? 'Generating...' : 'Generate Invite Code'}</button>
                     )}
                   </div>
                   <div className="border-t border-gray-200 pt-3">
