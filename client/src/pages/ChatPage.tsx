@@ -271,17 +271,13 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
 
   function stopPolling() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = undefined; }
+    if (groupPollRef.current) { clearInterval(groupPollRef.current); groupPollRef.current = undefined; }
   }
 
   // Stop ALL polling on unmount
   useEffect(() => {
-    return () => { stopPolling(); if (groupPollRef.current) clearInterval(groupPollRef.current); clearGroupKeyCache(); };
+    return () => { stopPolling(); clearGroupKeyCache(); };
   }, []);
-
-  function stopPolling() {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = undefined; }
-    if (groupPollRef.current) { clearInterval(groupPollRef.current); groupPollRef.current = undefined; }
-  }
 
   const startDmChat = useCallback(async (friend: FriendInfo) => {
     setRightPanel(null);

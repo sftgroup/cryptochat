@@ -12,12 +12,10 @@
 import {
   deriveSharedKey,
   generateGroupKey,
-  encryptGroupKeyForMember,
   decryptGroupKey,
   encrypt,
   tryDecrypt,
   type KeyPair,
-  type EncryptedMessage,
   type GroupKeyEnvelope,
 } from './crypto';
 import { importPublicKey } from './crypto';
@@ -146,7 +144,7 @@ export async function fetchMyGroupKey(
     const sharedKey = await deriveSharedKey(myKeyPair, peerPubkey, myUserId, creatorAddress);
     const groupKey = await decryptGroupKey(envelope, sharedKey);
 
-    const info: GroupKeyInfo = { groupId, groupKey, version: envelope.version || 1 };
+    const info: GroupKeyInfo = { groupId, groupKey, version: 1 };
     groupKeyCache.set(groupId, info);
 
     return info;
