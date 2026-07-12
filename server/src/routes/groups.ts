@@ -58,7 +58,7 @@ groupRouter.get('/:id/keys', async (req: AuthRequest, res) => {
     if (!isMember) return res.status(403).json({ error: 'Not a member' });
 
     const envelopes = await prisma.groupKeyEnvelope.findMany({ where: { groupId } });
-    res.json({ envelopes: envelopes.map(e => ({ userId: e.userId, encryptedKey: e.encryptedKey, iv: e.iv, version: e.version })) });
+    res.json({ envelopes: envelopes.map((e: { userId: string; encryptedKey: string; iv: string; version: number }) => ({ userId: e.userId, encryptedKey: e.encryptedKey, iv: e.iv, version: e.version })) });
   } catch (err) { console.error('list group keys:', err); res.status(500).json({ error: 'Internal error' }); }
 });
 
@@ -80,7 +80,7 @@ groupRouter.get('/', async (req: AuthRequest, res) => {
       },
       orderBy: { group: { updatedAt: 'desc' } },
     });
-    res.json({ groups: memberships.map(m => m.group) });
+    res.json({ groups: memberships.map((m: { group: any }) => m.group) });
   } catch (err) {
     console.error('list groups:', err);
     res.status(500).json({ error: 'Internal error' });
@@ -202,7 +202,7 @@ groupRouter.get('/:id', async (req: AuthRequest, res) => {
       },
     });
     if (!group) return res.status(404).json({ error: 'Not found' });
-    const isMember = group.members.some(m => m.userId === req.user!.userId);
+    const isMember = group.members.some((m: { userId: string }) => m.userId === req.user!.userId);
     if (!isMember) return res.status(403).json({ error: 'Not a member' });
     res.json({ group });
   } catch (err) {
