@@ -7,6 +7,8 @@ import type { TransferPayload } from '../lib/tx';
 import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessage } from '../lib/groupKeys';
 import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
+import RedPacketForm from '../components/RedPacketForm';
+import RedPacketCard from '../components/RedPacketCard';
 import IpfsMomentContent from '../components/IpfsMomentContent';
 import EmojiPicker from '../components/EmojiPicker';
 
@@ -40,7 +42,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   const [activeChat, setActiveChat] = useState<{ type: 'dm'; friend: FriendInfo } | { type: 'group'; group: GroupInfo } | null>(null);
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [composing, setComposing] = useState('');
-  const [showTransfer, setShowTransfer] = useState(false);
+  const [showTransfer, setShowTransfer] = useState<'transfer' | 'redpacket' | false>(false);
   const [rightPanel, setRightPanel] = useState<'add_friend' | 'join_group' | 'info' | null>(null);
   const [joinByCodeMode, setJoinByCodeMode] = useState(false);
   const [groupInviteCode, setGroupInviteCode] = useState('');
@@ -49,6 +51,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   const [inviteMemberAddr, setInviteMemberAddr] = useState('');
   const [inviteMemberLoading, setInviteMemberLoading] = useState(false);
   const [inviteMemberMsg, setInviteMemberMsg] = useState('');
+  const [redPackets, setRedPackets] = useState<any[]>([]);
   const [addFriendAddr, setAddFriendAddr] = useState('');
   const [addFriendMsg, setAddFriendMsg] = useState('');
   const [addFriendErr, setAddFriendErr] = useState('');
@@ -187,7 +190,14 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
       try {
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const ws = new WebSocket(`${proto}//${location.hostname}:4089/ws?token=${encodeURIComponent(authStore.token!)}&userId=${encodeURIComponent(user.id)}`);
-        ws.onmessage = () => { loadData(); };
+        ws.onmessage = (ev: MessageEvent) => {
+          try {
+            const data = JSON.parse(ev.data);
+            if (data.type === 'new_dm' || data.type === 'new_group_msg' || data.type === 'red_packet') {
+              loadData();
+            }
+          } catch { loadData(); }
+        };
       } catch { /* ws not available */ }
     }
 
@@ -207,6 +217,15 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
       const ir = await fetch('/api/dm/inbox', { headers: authStore.headers() });
       if (ir.ok) { const d = await ir.json(); setInbox(d.inbox); }
     } catch {}
+
+    // Red packets for active chat
+    if (activeChat) {
+      try {
+        const scopeId = activeChat.type === 'group' ? activeChat.group.id : activeChat.friend.userId;
+        const rpr = await fetch(`/api/redpacket?scope=${activeChat.type === 'group' ? 'group' : 'dm'}&scopeId=${scopeId}`);
+        if (rpr.ok) { const d = await rpr.json(); setRedPackets(d.packets || []); }
+      } catch {}
+    }
 
     // Auto-fetch group keys for all my groups
     if (keyPairRef.current) {
@@ -396,6 +415,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   }
 
   async function sendTransfer(_payload: TransferPayload) { setShowTransfer(false); }
+
 
   async function handleAddFriend() {
     setAddFriendErr(''); setAddFriendMsg('');
@@ -846,6 +866,12 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                     <p className="text-gray-400 text-sm">{cryptoReady ? 'E2EE ready — send an encrypted message.' : 'Send a message to start.'}</p>
                   </div>
                 )}
+                {/* Red packets — shown as special cards above messages */}
+                {redPackets.map((rp: any) => (
+                  <div key={rp.id} className="flex justify-center my-3">
+                    <RedPacketCard packetId={rp.id} userId={user.id} />
+                  </div>
+                ))}
                 {messages.map((msg, i) => {
                   const txMsg = (activeChat.type === 'dm') ? decodeTxMessage(msg.content || '') : null;
                   const isSent = msg.sender === user.id;
@@ -889,7 +915,16 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
 
               {/* Input area — WeChat style: textarea on top, toolbar below */}
               <div className="bg-[#f7f7f7] border-t border-gray-300">
-                {showTransfer && <div className="px-3 pt-3"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>}
+                {showTransfer === 'redpacket' && (<div className="px-3 pt-3"><RedPacketForm
+                  scope={activeChat?.type === 'group' ? 'group' : 'dm'}
+                  scopeId={activeChat?.type === 'group' ? activeChat.group.id : activeChat?.type === 'dm' ? activeChat.friend.userId : ''}
+                  onSend={async () => { setShowTransfer(false); 
+                    // The red packet card will arrive via WS push; 
+                    // for now refresh immediately
+                    setTimeout(() => loadData(), 500);
+                  }}
+                  onCancel={() => setShowTransfer(false)} /></div>)}
+                {showTransfer === 'transfer' && (<div className="px-3 pt-3"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>)}
                 {/* Textarea — tall, rounded */}
                 <div className="px-3 pt-3 pb-1">
                   <textarea
@@ -954,8 +989,10 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                       e.target.value = '';
                     }} />
                   </label>
-                  <button onClick={() => { setShowTransfer(true); }}
-                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded transition-colors cursor-pointer" title="Red Packet">🧧</button>
+                  <button onClick={() => { setShowTransfer('transfer'); }}
+                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded transition-colors cursor-pointer" title="Transfer">💸</button>
+                  <button onClick={() => { setShowTransfer('redpacket'); }}
+                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-red-500 rounded transition-colors cursor-pointer" title="Red Packet">🧧</button>
                   <div className="flex-1" />
                   <button onClick={sendMessage} disabled={!composing.trim()}
                     className="bg-blue-500 hover:bg-blue-600 text-white font-medium text-sm px-5 py-1.5 rounded-md disabled:opacity-40 transition-colors">Send</button>

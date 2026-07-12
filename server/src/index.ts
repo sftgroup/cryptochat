@@ -13,6 +13,7 @@ import { friendsRouter } from './routes/friends.js';
 import { dmRouter } from './routes/dm.js';
 import { momentsRouter } from './routes/moments.js';
 import { ipfsRouter } from './routes/ipfs.js';
+import { redpacketRouter } from './routes/redpacket.js';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '4088', 10);
@@ -31,6 +32,7 @@ app.use('/api/friends', friendsRouter);
 app.use('/api/dm', dmRouter);
 app.use('/api/moments', momentsRouter);
 app.use('/api/ipfs', ipfsRouter);
+app.use('/api/redpacket', redpacketRouter);
 
 // Health
 app.get('/api/health', (_req, res) => {

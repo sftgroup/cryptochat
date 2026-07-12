@@ -176,3 +176,38 @@ model MomentComment {
 
   @@index([momentId, createdAt])
 }
+
+// ── Red Packet (红包) ──
+
+model RedPacket {
+  id          String   @id @default(uuid())
+  senderId    String
+  scope       String   @default("dm") // "dm" | "group"
+  scopeId     String   // dm: peer userId; group: groupId
+  amount      String   // total amount in wei (native ETH/token)
+  count       Int      // number of packets
+  chainId     Int      // which chain the transfer is on
+  tokenAddress String? // null = native
+  tokenSymbol String   @default("ETH")
+  message     String?  // 祝福语
+  remaining   Int      // how many left to claim
+  claimed     Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  claims RedPacketClaim[]
+
+  @@index([scopeId])
+  @@index([senderId])
+}
+
+model RedPacketClaim {
+  id          String    @id @default(uuid())
+  packetId    String
+  packet      RedPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
+  claimerId   String    // userId who claimed
+  amount      String    // wei amount received
+  claimedAt   DateTime  @default(now())
+
+  @@unique([packetId, claimerId])
+  @@index([packetId])
+}
