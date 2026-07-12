@@ -94,24 +94,16 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
         const d = await r.json();
         if (!d.messages) return;
 
-        const newRaw = d.messages.filter((m: any) => m.id > lastMsgIdRef.current);
-        if (newRaw.length === 0) return;
-
-        const newDecrypted = await Promise.all(
-          newRaw.map(async (m: any) => ({
+        const decrypted = await Promise.all(
+          d.messages.map(async (m: any) => ({
             id: m.id,
             content: await decryptGroupMessage(m.content, group.id),
             sender: m.senderId,
             time: new Date(m.createdAt).getTime(),
           }))
         );
-
-        setMessages(prev => {
-          const existing = new Set(prev.map(m => m.id));
-          const toAdd = newDecrypted.filter(m => !existing.has(m.id));
-          return [...prev, ...toAdd];
-        });
-        lastMsgIdRef.current = d.messages[d.messages.length - 1].id;
+        setMessages(decrypted);
+        if (d.messages.length > 0) lastMsgIdRef.current = d.messages[d.messages.length - 1].id;
       } catch {}
     }, 2000);
   }
@@ -119,25 +111,28 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   async function sendGroupMessage() {
     if (!activeChat || activeChat.type !== 'group' || !composing.trim()) return;
 
-    let content = composing.trim();
+    const plaintext = composing.trim();
+    setComposing('');
+    const tempId = 'local-group-' + Date.now();
 
-    // Encrypt with group key if available
+    // Optimistic: show message immediately
+    setMessages(prev => [...prev, { id: tempId, content: plaintext, sender: user.userId, time: Date.now() }]);
+
     try {
-      const { content: encrypted, keyVersion } = await encryptGroupMessage(content, activeChat.group.id);
-      content = encrypted;
+      const { content: encrypted, keyVersion } = await encryptGroupMessage(plaintext, activeChat.group.id);
 
       const r = await fetch(`/api/groups/${activeChat.group.id}/messages`, {
         method: 'POST', headers: authStore.headers(),
-        body: JSON.stringify({ content, keyVersion }),
+        body: JSON.stringify({ content: encrypted, keyVersion }),
       });
       if (r.ok) {
         const d = await r.json();
         if (d.message) {
-          const display = await decryptGroupMessage(d.message.content, activeChat.group.id);
-          setMessages(prev => [...prev, { id: d.message.id, content: display, sender: d.message.senderId, time: new Date(d.message.createdAt).getTime() }]);
+          setMessages(prev => prev.map(m => m.id === tempId ? { id: d.message.id, content: plaintext, sender: user.userId, time: new Date(d.message.createdAt).getTime() } : m));
         }
+      } else {
+        setMessages(prev => prev.filter(m => m.id !== tempId));
       }
-      setComposing('');
     } catch (err) { console.error('send group msg:', err); }
   }
 
@@ -247,7 +242,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
     } catch (err) { console.error('loadDmMessages error:', err); }
   }
 
-  // Poll for new DM messages every 2s
+  // Poll for new DM messages every 2s (re-fetch all for reliability)
   function startPolling(friend: FriendInfo) {
     stopPolling();
     pollRef.current = setInterval(async () => {
@@ -258,24 +253,16 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
 
         const sharedKey = await getOrDeriveSharedKey(friend.address);
 
-        const newRaw = d.messages.filter((m: any) => m.id > lastMsgIdRef.current);
-        if (newRaw.length === 0) return;
-
-        const newDecrypted = await Promise.all(
-          newRaw.map(async (m: any) => ({
+        const decrypted = await Promise.all(
+          d.messages.map(async (m: any) => ({
             id: m.id,
             content: await tryDecrypt(sharedKey, m.content),
             sender: m.sender,
             time: m.time,
           }))
         );
-
-        setMessages(prev => {
-          const existing = new Set(prev.map(m => m.id));
-          const toAdd = newDecrypted.filter(m => !existing.has(m.id));
-          return [...prev, ...toAdd];
-        });
-        lastMsgIdRef.current = d.messages[d.messages.length - 1].id;
+        setMessages(decrypted);
+        if (d.messages.length > 0) lastMsgIdRef.current = d.messages[d.messages.length - 1].id;
       } catch {}
     }, 2000);
   }
@@ -313,8 +300,14 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   async function sendDmMessage() {
     if (!activeChat || activeChat.type !== 'dm' || !composing.trim()) return;
 
-    let content = composing.trim();
+    const plaintext = composing.trim();
+    setComposing('');
+    const tempId = 'local-' + Date.now();
 
+    // Optimistic: show message immediately
+    setMessages(prev => [...prev, { id: tempId, content: plaintext, sender: user.userId, time: Date.now() }]);
+
+    let content = plaintext;
     // Encrypt if we have a shared key
     try {
       const sharedKey = await getOrDeriveSharedKey(activeChat.friend.address);
@@ -334,12 +327,13 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
       if (r.ok) {
         const d = await r.json();
         if (d.message) {
-          const sharedKey = await getOrDeriveSharedKey(activeChat.friend.address);
-          const display = await tryDecrypt(sharedKey, d.message.content);
-          setMessages(prev => [...prev, { id: d.message.id, content: display, sender: d.message.sender, time: d.message.time }]);
+          // Replace temp message with real server message
+          setMessages(prev => prev.map(m => m.id === tempId ? { id: d.message.id, content: plaintext, sender: user.userId, time: d.message.time } : m));
         }
+      } else {
+        // Remove optimistic message on failure
+        setMessages(prev => prev.filter(m => m.id !== tempId));
       }
-      setComposing('');
     } catch (err) { console.error('send dm error:', err); }
   }
 
