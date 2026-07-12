@@ -82,11 +82,8 @@ export async function hasCeresDID(address: string): Promise<boolean> {
 }
 
 // ── Pubkey（关联到 Ceres DID，存储在后台） ──
-
-/**
- * 获取用户的 ECDH 公钥 — 只从后端查（不再走链上 RPC）
- */
-export async function getPubkey(address: string): Promise<string | null> {
+/** @deprecated — use getPubkey() below instead */
+export async function getPubkeyOnlyBackend(address: string): Promise<string | null> {
   try {
     const { authStore } = await import('./api');
     const r = await fetch(`/api/user/pubkey/${address}`, {
@@ -96,12 +93,12 @@ export async function getPubkey(address: string): Promise<string | null> {
     const d = await r.json();
     return d.publicKey || null;
   } catch (err) {
-    console.warn('[Ceres] getPubkey failed:', err);
     return null;
   }
 }
 
 /**
+ * 从 CeresDID 链上查询用户 ECDH 公钥。
  * 上传 ECDH 公钥到后端（关联到 Ceres DID）
  * 纯 HTTP，无 gas，不弹钱包
  */
@@ -112,6 +109,81 @@ export async function registerPubkey(pubkeyStr: string): Promise<void> {
     headers: authStore.headers(),
     body: JSON.stringify({ publicKey: pubkeyStr }),
   });
+}
+
+/**
+ * 从 CeresDID 链上查询用户 ECDH 公钥。
+ *
+ * 调用链:
+ *   CeresRegistry.tokenOf(address) → tokenId
+ *   CeresDID.profiles(tokenId) → { name, bio, avatar, updatedAt }
+ *   CeresDID.getUrls(tokenId) → urls[] → 筛选 "ceres:pubkey:..." 条目
+ */
+export async function getPubkeyOnChain(address: string): Promise<string | null> {
+  const { readContract } = await import('wagmi/actions');
+  const { config } = await import('../wagmi');
+  const { sepolia } = await import('wagmi/chains');
+
+  // CeresDID + CeresRegistry (Sepolia)
+  const REGISTRY = '0x662774B1206BeB96C4E100C3b72777e77a5Fb83c' as const;
+  const CERES_DID = '0xff4a3F031E950e329eF81a30B4D2f37DFef27101' as const;
+
+  try {
+    // 1. Get tokenId
+    const tokenId = await readContract(config, {
+      address: REGISTRY,
+      abi: [{ type: 'function', name: 'tokenOf', inputs: [{ name: '', type: 'address' }], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' }],
+      functionName: 'tokenOf',
+      args: [address as `0x${string}`],
+      chainId: sepolia.id,
+    } as any);
+
+    if (!tokenId || Number(tokenId) === 0) return null;
+
+    // 2. Get URLs from CeresDID
+    const urls = await readContract(config, {
+      address: CERES_DID,
+      abi: [{ type: 'function', name: 'getUrls', inputs: [{ name: '', type: 'uint256' }], outputs: [{ name: '', type: 'string[]' }], stateMutability: 'view' }],
+      functionName: 'getUrls',
+      args: [tokenId],
+      chainId: sepolia.id,
+    } as any);
+
+    if (!urls || !Array.isArray(urls)) return null;
+
+    // 3. Parse pubkey from urls
+    for (const url of urls) {
+      if (url.startsWith('ceres:pubkey:')) {
+        return url.slice('ceres:pubkey:'.length);
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn('[Ceres] on-chain pubkey lookup failed:', err);
+    return null;
+  }
+}
+
+/**
+ * 获取用户公钥 — 优先炼上 CeresDID，fallback 到后台。
+ */
+export async function getPubkey(address: string): Promise<string | null> {
+  // 1. Try chain (CeresDID profiles)
+  const chainPubkey = await getPubkeyOnChain(address);
+  if (chainPubkey) return chainPubkey;
+
+  // 2. Fallback to backend
+  try {
+    const { authStore } = await import('./api');
+    const r = await fetch(`/api/user/pubkey/${address}`, {
+      headers: authStore.headers(),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.publicKey || null;
+  } catch (err) {
+    return null;
+  }
 }
 
 /**

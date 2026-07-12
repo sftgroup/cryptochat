@@ -21,6 +21,7 @@ export default function App() {
     chainId: number | null;
   }>({ hasDID: false, inviter: null, inviteeCount: 0, chainId: null });
   const [pubkeyRegistered, setPubkeyRegistered] = useState(false);
+  const [pubkeyJson, setPubkeyJson] = useState<string>('');
   const [ceresChecked, setCeresChecked] = useState(false);
   const [_ceresCheckError, setCeresCheckError] = useState(false);
 
@@ -69,6 +70,7 @@ export default function App() {
         // 2. Generate ECDH key pair + register pubkey on backend
         const keyPair = await getOrCreateKeyPair();
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
+        setPubkeyJson(pubkeyStr);
         try {
           await registerPubkey(pubkeyStr);
           setPubkeyRegistered(true);
@@ -117,6 +119,7 @@ export default function App() {
       <CeresMintPage
         myAddress={myAddress}
         inviterAddress={ceresDID.inviter || undefined}
+        pubkeyJson={pubkeyJson}
         onDone={handleCeresDone}
       />
     );

@@ -24,6 +24,7 @@ import { sepolia } from 'wagmi/chains';
 
 const INVITE_CORE = '0xCD142BDDaf0fe4509C269CC1A5bbFFB25E33533D' as const;
 const REGISTRY = '0x662774B1206BeB96C4E100C3b72777e77a5Fb83c' as const;
+const CERES_DID = '0xff4a3F031E950e329eF81a30B4D2f37DFef27101' as const;
 
 const INVITE_CORE_ABI = [
   { type: 'function', name: 'hasInviter', inputs: [{ name: 'invitee', type: 'address' }], outputs: [{ name: '', type: 'bool' }], stateMutability: 'view' },
@@ -59,15 +60,33 @@ const REGISTRY_ABI = [
   { type: 'function', name: 'mintFeeEnabled', inputs: [], outputs: [{ name: '', type: 'bool' }], stateMutability: 'view' },
 ] as const;
 
+const CERES_DID_ABI = [
+  { type: 'function', name: 'updateProfile', inputs: [
+    { name: 'tokenId', type: 'uint256' },
+    { name: 'name', type: 'string' },
+    { name: 'bio', type: 'string' },
+    { name: 'avatar', type: 'string' },
+    { name: 'urls', type: 'string[]' },
+  ], outputs: [], stateMutability: 'nonpayable' },
+  { type: 'function', name: 'profiles', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [
+    { name: 'name', type: 'string' },
+    { name: 'bio', type: 'string' },
+    { name: 'avatar', type: 'string' },
+    { name: 'updatedAt', type: 'uint256' },
+  ], stateMutability: 'view' },
+  { type: 'function', name: 'getUrls', inputs: [{ name: 'tokenId', type: 'uint256' }], outputs: [{ name: '', type: 'string[]' }], stateMutability: 'view' },
+] as const;
+
 // ── Component ──
 
 interface Props {
   myAddress: string;
-  inviterAddress?: string; // from Ceres API (the person who invited this user)
+  inviterAddress?: string;
+  pubkeyJson?: string; // ECDH public key JWK to store on-chain
   onDone: () => void;
 }
 
-export default function CeresMintPage({ myAddress, inviterAddress, onDone }: Props) {
+export default function CeresMintPage({ myAddress, inviterAddress, pubkeyJson, onDone }: Props) {
   const { isConnected } = useAccount();
   const chainId = useChainId();
   const { switchChain } = useSwitchChain();
@@ -245,6 +264,30 @@ export default function CeresMintPage({ myAddress, inviterAddress, onDone }: Pro
       } as any);
       await waitForTransactionReceipt(config, { hash: profileHash } as any);
       console.log('[Ceres] createProfile done:', profileHash);
+
+      // Step 3: Upload ECDH pubkey on-chain via updateProfile
+      if (pubkeyJson) {
+        try {
+          setStep('binding'); // reuse binding indicator for pubkey upload
+          // Get the tokenId just minted (registry.tokenOf)
+          const tokenId = await readContract(config, {
+            address: REGISTRY, abi: REGISTRY_ABI,
+            functionName: 'tokenOf', args: [account.address], chainId: sepolia.id,
+          } as any);
+
+          const pubkeyHash = await writeContract(config, {
+            address: CERES_DID,
+            abi: CERES_DID_ABI,
+            functionName: 'updateProfile',
+            args: [tokenId, name.trim(), bio.trim(), '', [`ceres:pubkey:${pubkeyJson}`]],
+            chain: sepolia,
+          } as any);
+          await waitForTransactionReceipt(config, { hash: pubkeyHash } as any);
+          console.log('[Ceres] pubkey stored on-chain:', pubkeyHash);
+        } catch (e) {
+          console.warn('[Ceres] pubkey update failed (non-fatal):', e);
+        }
+      }
 
       setStep('done');
       setTimeout(() => onDone(), 1500);
