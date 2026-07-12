@@ -7,7 +7,6 @@
  */
 
 import { readContract, writeContract, waitForTransactionReceipt } from 'wagmi/actions';
-import { simulateContract } from 'viem/actions';
 import { config } from '../wagmi';
 
 const CONTRACT_ADDRESS = '0x253E08cE05ae2C72D19b14506C58CA5Fe9FDdC0f' as const;
@@ -47,38 +46,16 @@ export async function setPubkeyOnChain(pubkeyJson: string): Promise<string> {
   const { stringToHex } = await import('viem');
   const pubkeyBytes = stringToHex(pubkeyJson);
 
-  // First simulate the contract call so the wallet can generate a valid gas estimate.
-  // Without simulation, the wallet may disable the Confirm button due to unknown gas.
-  const { getConnectorClient } = await import('wagmi/actions');
-  const walletClient = await getConnectorClient(config);
-  try {
-    await simulateContract(walletClient, {
-      address: CONTRACT_ADDRESS,
-      abi: ABI,
-      functionName: 'setPubkey',
-      args: [pubkeyBytes],
-      chain: config.chains[0],
-    } as any);
-  } catch (simErr: any) {
-    const reason = typeof simErr === 'string' ? simErr : simErr?.message || String(simErr);
-    console.error('[Registry] simulate setPubkey failed:', reason);
-    // Propagate the revert reason so the UI can display it.
-    if (reason.includes('already registered') || reason.includes('pubkey')) {
-      return 'already-registered';
-    }
-    throw simErr;
-  }
-
   const hash = await writeContract(config, {
     address: CONTRACT_ADDRESS,
     abi: ABI,
     functionName: 'setPubkey',
     args: [pubkeyBytes],
     chainId: 11155111,
-  });
+  } as any);
 
   console.log('[Registry] writeContract tx:', hash);
-  await waitForTransactionReceipt(config, { hash });
+  await waitForTransactionReceipt(config, { hash } as any);
   return hash;
 }
 
