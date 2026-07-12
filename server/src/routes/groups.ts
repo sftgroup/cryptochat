@@ -159,6 +159,37 @@ groupRouter.post('/join', async (req: AuthRequest, res) => {
   }
 });
 
+// POST /api/groups/join-by-code — join via invite code
+// Must come BEFORE /:id route
+// Must come BEFORE /:id route
+groupRouter.post('/join-by-code', async (req: AuthRequest, res) => {
+  try {
+    const { code } = req.body;
+    if (!code?.trim()) return res.status(400).json({ error: 'Invite code required' });
+
+    const group = await prisma.group.findUnique({ where: { inviteCode: code.trim().toUpperCase() } });
+    if (!group) return res.status(404).json({ error: 'Invalid invite code' });
+
+    const existing = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId: group.id, userId: req.user!.userId } },
+    });
+    if (existing) return res.status(409).json({ error: 'Already a member' });
+
+    await prisma.groupMember.create({
+      data: { groupId: group.id, userId: req.user!.userId, role: 'member' },
+    });
+
+    const updated = await prisma.group.findUnique({
+      where: { id: group.id },
+      include: { members: { include: { user: { select: { id: true, address: true, displayName: true, avatarUrl: true } } } } },
+    });
+    res.json({ group: updated });
+  } catch (err) {
+    console.error('join by code:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
 // GET /api/groups/:id — group details
 groupRouter.get('/:id', async (req: AuthRequest, res) => {
   try {
@@ -210,6 +241,33 @@ groupRouter.post('/:id/invite', async (req: AuthRequest, res) => {
     }
     res.json({ invited: added, total: addresses.length });
   } catch (err) { console.error('invite:', err); res.status(500).json({ error: 'Internal error' }); }
+});
+
+// POST /api/groups/:id/invite-code — generate/reveal invite code (admin only)
+groupRouter.post('/:id/invite-code', async (req: AuthRequest, res) => {
+  try {
+    const groupId = req.params.id as string;
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) return res.status(404).json({ error: 'Not found' });
+
+    const isMember = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: req.user!.userId } },
+    });
+    if (!isMember || isMember.role !== 'admin') return res.status(403).json({ error: 'Only group admins can generate invite codes' });
+
+    // If already has a code, just return it
+    if (group.inviteCode) return res.json({ inviteCode: group.inviteCode });
+
+    // Generate a 6-char alphanumeric code
+    const code = Array.from({ length: 6 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]).join('');
+
+    const updated = await prisma.group.update({
+      where: { id: groupId },
+      data: { inviteCode: code },
+    });
+
+    res.json({ inviteCode: updated.inviteCode });
+  } catch (err) { console.error('invite code:', err); res.status(500).json({ error: 'Internal error' }); }
 });
 
 // GET /api/groups/:id/messages

@@ -39,6 +39,8 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
   const [composing, setComposing] = useState('');
   const [showTransfer, setShowTransfer] = useState(false);
   const [rightPanel, setRightPanel] = useState<'add_friend' | 'join_group' | 'info' | null>(null);
+  const [joinByCodeMode, setJoinByCodeMode] = useState(false);
+  const [groupInviteCode, setGroupInviteCode] = useState('');
   const [addFriendAddr, setAddFriendAddr] = useState('');
   const [addFriendMsg, setAddFriendMsg] = useState('');
   const [addFriendErr, setAddFriendErr] = useState('');
@@ -845,13 +847,21 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                   )}
                   {rightPanel === 'join_group' && (
                     <>
-                      <input type="text" placeholder="Group name or ID" value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
+                      <div className="flex gap-0 bg-gray-100 rounded-lg p-0.5">
+                        <button onClick={() => { setAddFriendAddr(''); setAddFriendMsg(''); setAddFriendErr(''); }}
+                          className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors ${!joinByCodeMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>By Name</button>
+                        <button onClick={() => { setAddFriendAddr(''); setAddFriendMsg(''); setAddFriendErr(''); setJoinByCodeMode(true); }}
+                          className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors ${joinByCodeMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>By Code</button>
+                      </div>
+                      <input type="text" placeholder={joinByCodeMode ? 'Enter 6-char invite code' : 'Group name'} value={addFriendAddr} onChange={e => setAddFriendAddr(e.target.value)}
                         className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-400" autoFocus />
                       <button onClick={async () => {
                         if (!addFriendAddr.trim()) return;
                         try {
-                          const res = await fetch('/api/groups/join', { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ name: addFriendAddr.trim() }) });
-                          if (res.ok) { setAddFriendMsg('Joined group!'); loadData(); }
+                          const endpoint = joinByCodeMode ? '/api/groups/join-by-code' : '/api/groups/join';
+                          const bodyKey = joinByCodeMode ? 'code' : 'name';
+                          const res = await fetch(endpoint, { method: 'POST', headers: authStore.headers(), body: JSON.stringify({ [bodyKey]: addFriendAddr.trim() }) });
+                          if (res.ok) { setAddFriendMsg('Joined group! ✅'); loadData(); }
                           else { const d = await res.json(); setAddFriendErr(d.error || 'Failed to join'); }
                         } catch { setAddFriendErr('Network error'); }
                       }} className="w-full bg-emerald-500 text-white font-bold text-sm py-2.5 rounded-lg hover:bg-emerald-600 transition-colors">Join Group</button>
@@ -882,6 +892,27 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                     <div className="text-5xl mb-2">👥</div>
                     <div className="text-gray-800 text-lg font-bold">{activeChat.group.name}</div>
                     {activeChat.group.description && <div className="text-gray-500 text-xs mt-1">{activeChat.group.description}</div>}
+                  </div>
+                  {/* Invite code section */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-gray-500 text-[11px] uppercase tracking-wider font-semibold mb-2">Invite Code</p>
+                    {groupInviteCode ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-2">
+                          <code className="flex-1 bg-white text-blue-800 font-mono font-bold text-lg tracking-widest py-1.5 px-3 rounded border border-blue-300 text-center">{groupInviteCode}</code>
+                          <button onClick={() => { navigator.clipboard.writeText(groupInviteCode); setAddFriendMsg('Copied!'); setTimeout(() => setAddFriendMsg(''), 2000); }}
+                            className="bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded hover:bg-blue-600 transition-colors shrink-0">Copy</button>
+                        </div>
+                        <p className="text-gray-500 text-xs">Share this code — others can join with it.</p>
+                      </>
+                    ) : (
+                      <button onClick={async () => {
+                        try {
+                          const res = await fetch(`/api/groups/${activeChat.group.id}/invite-code`, { method: 'POST', headers: authStore.headers() });
+                          if (res.ok) { const d = await res.json(); setGroupInviteCode(d.inviteCode); }
+                        } catch {}
+                      }} className="w-full bg-blue-500 text-white font-bold text-sm py-2 rounded-lg hover:bg-blue-600 transition-colors">Generate Invite Code</button>
+                    )}
                   </div>
                   <div className="border-t border-gray-200 pt-3">
                     <p className="text-gray-400 text-[11px] uppercase tracking-wider font-semibold mb-2">Members ({activeChat.group.members?.length || 0})</p>

@@ -87,6 +87,7 @@ model Group {
   description String?
   avatarUrl   String?
   xmtpGroupId String?
+  inviteCode  String?  @unique
   creatorId   String
   creator     User     @relation("GroupCreator", fields: [creatorId], references: [id])
   createdAt   DateTime @default(now())
@@ -97,6 +98,7 @@ model Group {
   keyEnvelopes GroupKeyEnvelope[]
 
   @@index([xmtpGroupId])
+  @@index([inviteCode])
 }
 
 model GroupMember {
