@@ -64,10 +64,10 @@ friendsRouter.get('/requests', async (req: AuthRequest, res) => {
     res.json({
       requests: requests.map((r: { id: string; fromId: string; toId: string; status: string; createdAt: Date; user?: { id: string; address: string; displayName?: string; avatarUrl?: string } }) => ({
         id: r.id,
-        userId: r.user.id,
-        address: r.user.address,
-        displayName: r.user.displayName || r.user.address.slice(0, 6) + '...' + r.user.address.slice(-4),
-        avatarUrl: r.user.avatarUrl,
+        userId: r.user?.id,
+        address: r.user?.address,
+        displayName: r.user?.displayName || r.user?.address?.slice(0, 6) + '...' + r.user?.address?.slice(-4),
+        avatarUrl: r.user?.avatarUrl,
         createdAt: r.createdAt,
       })),
     });
