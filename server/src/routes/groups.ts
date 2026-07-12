@@ -344,3 +344,111 @@ groupRouter.post('/:id/leave', async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Internal error' });
   }
 });
+
+// PUT /api/groups/:id — update group (rename, change description) — admin only
+groupRouter.put('/:id', async (req: AuthRequest, res) => {
+  try {
+    const groupId = req.params.id as string;
+    const userId = req.user!.userId;
+
+    const membership = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+    if (!membership || membership.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admin can update group' });
+    }
+
+    const { name, description } = req.body;
+    const data: any = {};
+    if (name) data.name = name;
+    if (description !== undefined) data.description = description;
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
+
+    const group = await prisma.group.update({ where: { id: groupId }, data });
+    res.json({ group });
+  } catch (err) {
+    console.error('update group:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// POST /api/groups/:id/kick/:userId — kick a member — admin only
+groupRouter.post('/:id/kick/:userId', async (req: AuthRequest, res) => {
+  try {
+    const groupId = req.params.id as string;
+    const adminId = req.user!.userId;
+    const targetId = req.params.userId as string;
+
+    // Check admin role
+    const adminMembership = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: adminId } },
+    });
+    if (!adminMembership || adminMembership.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admin can kick members' });
+    }
+
+    // Cannot kick self
+    if (adminId === targetId) {
+      return res.status(400).json({ error: 'Cannot kick yourself — use Leave Group instead' });
+    }
+
+    // Check target is a member
+    const target = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: targetId } },
+    });
+    if (!target) return res.status(404).json({ error: 'Member not found in group' });
+
+    await prisma.groupMember.delete({ where: { id: target.id } });
+    await prisma.groupKeyEnvelope.deleteMany({ where: { groupId, userId: targetId } });
+
+    const { pushEvent } = await import('../index.js');
+    pushEvent(targetId, { type: 'kicked_from_group', payload: { groupId } });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('kick member:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+// POST /api/groups/:id/transfer — transfer admin to another member — admin only
+groupRouter.post('/:id/transfer', async (req: AuthRequest, res) => {
+  try {
+    const groupId = req.params.id as string;
+    const adminId = req.user!.userId;
+    const newAdminId = req.body.userId as string;
+
+    const adminMembership = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: adminId } },
+    });
+    if (!adminMembership || adminMembership.role !== 'admin') {
+      return res.status(403).json({ error: 'Only admin can transfer ownership' });
+    }
+
+    const target = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId: newAdminId } },
+    });
+    if (!target) return res.status(404).json({ error: 'Target member not found in group' });
+
+    // Transfer: demote admin → member, promote target → admin
+    await prisma.groupMember.update({
+      where: { id: adminMembership.id },
+      data: { role: 'member' },
+    });
+    await prisma.groupMember.update({
+      where: { id: target.id },
+      data: { role: 'admin' },
+    });
+
+    const { pushEvent } = await import('../index.js');
+    pushEvent(newAdminId, { type: 'group_admin_changed', payload: { groupId } });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('transfer admin:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});

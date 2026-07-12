@@ -52,6 +52,8 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   const [inviteMemberAddr, setInviteMemberAddr] = useState('');
   const [inviteMemberLoading, setInviteMemberLoading] = useState(false);
   const [inviteMemberMsg, setInviteMemberMsg] = useState('');
+  const [editingGroupName, setEditingGroupName] = useState(false);
+  const [editGroupName, setEditGroupName] = useState('');
   const [redPackets, setRedPackets] = useState<any[]>([]);
   const [addFriendAddr, setAddFriendAddr] = useState('');
   const [addFriendMsg, setAddFriendMsg] = useState('');
@@ -502,6 +504,44 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
       }
     } catch { setInviteMemberMsg('❌ Network error'); }
     setInviteMemberLoading(false);
+  }
+
+  async function handleRenameGroup() {
+    if (!activeChat || activeChat.type !== "group" || !editGroupName.trim()) return;
+    try {
+      const r = await fetch(`/api/groups/${activeChat.group.id}`, {
+        method: "PUT", headers: authStore.headers(),
+        body: JSON.stringify({ name: editGroupName.trim() }),
+      });
+      if (r.ok) {
+        setActiveChat(prev => prev && prev.type === "group" ? { ...prev, group: { ...prev.group, name: editGroupName.trim() } } : prev);
+        setEditingGroupName(false);
+        loadData();
+      } else { const d = await r.json(); alert(d.error || "Failed to rename"); }
+    } catch { alert("Network error"); }
+  }
+
+  async function handleKickMember(targetId: string) {
+    if (!activeChat || activeChat.type !== "group") return;
+    if (!confirm("Kick this member from " + activeChat.group.name + "?")) return;
+    try {
+      const r = await fetch(`/api/groups/${activeChat.group.id}/kick/${targetId}`, { method: "POST", headers: authStore.headers() });
+      if (r.ok) loadData();
+      else { const d = await r.json(); alert(d.error || "Failed to kick"); }
+    } catch { alert("Network error"); }
+  }
+
+  async function handleTransferAdmin(targetId: string) {
+    if (!activeChat || activeChat.type !== "group") return;
+    if (!confirm("Transfer admin role to this member? You will become a regular member.")) return;
+    try {
+      const r = await fetch(`/api/groups/${activeChat.group.id}/transfer`, {
+        method: "POST", headers: authStore.headers(),
+        body: JSON.stringify({ userId: targetId }),
+      });
+      if (r.ok) loadData();
+      else { const d = await r.json(); alert(d.error || "Failed to transfer"); }
+    } catch { alert("Network error"); }
   }
 
   async function handleLeaveGroup() {
@@ -1100,8 +1140,25 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                 <div className="space-y-3 mt-2">
                   <div className="text-center pb-2">
                     <div className="text-5xl mb-2">👥</div>
-                    <div className="text-gray-800 text-lg font-bold">{activeChat.group.name}</div>
-                    {activeChat.group.description && <div className="text-gray-500 text-xs mt-1">{activeChat.group.description}</div>}
+                    {editingGroupName ? (
+                      <div className="flex flex-col gap-2">
+                        <input type="text" value={editGroupName} onChange={e => setEditGroupName(e.target.value)}
+                          className="text-sm bg-white border border-blue-300 rounded-lg px-3 py-2 outline-none focus:border-blue-500 text-center"
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameGroup(); if (e.key === 'Escape') setEditingGroupName(false); }} autoFocus />
+                        <div className="flex gap-2 justify-center">
+                          <button onClick={handleRenameGroup} className="text-xs bg-blue-500 text-white font-bold px-3 py-1 rounded hover:bg-blue-600 cursor-pointer">Save</button>
+                          <button onClick={() => setEditingGroupName(false)} className="text-xs text-gray-500 px-3 py-1 rounded hover:bg-gray-100 cursor-pointer">Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-gray-800 text-lg font-bold flex items-center justify-center gap-1">
+                          {activeChat.group.name}
+                          {(() => { const myRole = activeChat.group.members?.find((m:any) => m.userId === user.id)?.role; return myRole === 'admin' ? <button onClick={() => { setEditGroupName(activeChat.group.name); setEditingGroupName(true); }} className="text-gray-400 hover:text-blue-500 text-sm cursor-pointer ml-1" title="Rename">✏️</button> : null; })()}
+                        </div>
+                        {activeChat.group.description && <div className="text-gray-500 text-xs mt-1">{activeChat.group.description}</div>}
+                      </>
+                    )}
                   </div>
                   {/* Invite code section */}
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
@@ -1145,6 +1202,14 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                       <div key={m.userId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm" style={{background:`linear-gradient(135deg,${c1},${c2})`}}>{getAvatarLetter(m.user?.displayName || m.user?.address || '?')}</div>
                         <div className="flex-1"><div className="text-gray-800 text-xs font-medium">{m.user?.displayName || m.user?.address?.slice(0,6)+'...'+m.user?.address?.slice(-4)}</div><div className="text-gray-400 text-[11px] capitalize">{m.role}</div></div>
+                        {(() => { const myRole = activeChat.group.members?.find((x: any) => x.userId === user.id)?.role; if (myRole !== 'admin' || m.userId === user.id) return null; return (
+                          <div className="flex items-center gap-1">
+                            {m.role !== 'admin' && (
+                              <button onClick={(e) => { e.stopPropagation(); handleKickMember(m.userId); }} className="text-red-400 hover:text-red-600 text-xs cursor-pointer" title="Kick">🚫</button>
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); handleTransferAdmin(m.userId); }} className="text-orange-400 hover:text-orange-600 text-xs cursor-pointer" title="Transfer Admin">👑</button>
+                          </div>
+                        ); })()}
                       </div>
                     );})}
 
