@@ -744,22 +744,32 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input area — WeChat style */}
-              <div className="bg-white border-t border-gray-200 p-3">
-                {showTransfer && <div className="mb-2"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>}
-                <div className="flex gap-2 items-end relative">
-                  {/* Emoji button */}
-                  <div className="relative shrink-0">
+              {/* Input area — WeChat style: textarea on top, toolbar below */}
+              <div className="bg-[#f7f7f7] border-t border-gray-200">
+                {showTransfer && <div className="px-3 pt-3"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>}
+                {/* Textarea — tall, rounded */}
+                <div className="px-3 pt-3 pb-1">
+                  <textarea
+                    value={composing}
+                    onChange={e => setComposing(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && composing.trim() && !showTransfer) { e.preventDefault(); sendMessage(); } }}
+                    placeholder=""
+                    rows={3}
+                    className="w-full bg-white border border-gray-200 rounded-lg outline-none text-gray-800 text-sm placeholder-gray-400 py-2.5 px-3 resize-none focus:border-gray-300 transition-colors"
+                  />
+                </div>
+                {/* Toolbar row: emoji | file | red-packet | spacer | send */}
+                <div className="flex items-center gap-1 px-3 pb-3 relative">
+                  <div className="relative">
                     <button onClick={() => setShowEmoji(!showEmoji)}
-                      className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-lg cursor-pointer" title="Emoji">
+                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded transition-colors text-lg cursor-pointer" title="Emoji">
                       😊
                     </button>
                     {showEmoji && (
                       <EmojiPicker onSelect={e => setComposing(prev => prev + e)} onClose={() => setShowEmoji(false)} />
                     )}
                   </div>
-                  {/* File button */}
-                  <label className="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer shrink-0" title="Send File">
+                  <label className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded transition-colors cursor-pointer" title="File">
                     📎
                     <input type="file" className="hidden" onChange={async (e) => {
                       const file = e.target.files?.[0]; if (!file) return;
@@ -774,16 +784,11 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
                       e.target.value = '';
                     }} />
                   </label>
-                  {/* Text input */}
-                  <input type="text" value={composing} onChange={e => setComposing(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && composing.trim() && !showTransfer) { sendMessage(); } }}
-                    placeholder="Type a message..." className="flex-1 bg-gray-100 border-none outline-none text-gray-800 text-sm placeholder-gray-400 py-2.5 px-3 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-200 transition-all" />
-                  {/* Red Packet button */}
                   <button onClick={() => { setShowTransfer(true); }}
-                    className="shrink-0 text-xl text-orange-400 hover:text-orange-500 hover:bg-orange-50 w-9 h-9 flex items-center justify-center rounded-lg transition-colors cursor-pointer" title="Red Packet">🧧</button>
-                  {/* Send button */}
+                    className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded transition-colors cursor-pointer" title="Red Packet">🧧</button>
+                  <div className="flex-1" />
                   <button onClick={sendMessage} disabled={!composing.trim()}
-                    className="bg-blue-500 text-white font-bold text-sm px-4 py-2 rounded-xl hover:bg-blue-600 disabled:opacity-50 shrink-0 transition-colors">Send</button>
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-medium text-sm px-5 py-1.5 rounded-md disabled:opacity-40 transition-colors">Send</button>
                 </div>
               </div>
             </>
