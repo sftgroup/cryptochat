@@ -38,19 +38,8 @@ const groupKeyCache = new Map<string, GroupKeyInfo>();
 // ── Peer pubkey helpers ───────────────────────────────────────────
 
 async function getPeerPubkey(address: string): Promise<JsonWebKey | null> {
-  try {
-    const pubkey = await getPubkey(address);
-    if (pubkey) return importPublicKey(pubkey);
-  } catch {}
-
-  try {
-    const r = await fetch(`/api/user/pubkey/${address}`, { headers: authStore.headers() });
-    if (r.ok) {
-      const d = await r.json();
-      return importPublicKey(d.publicKey);
-    }
-  } catch {}
-
+  const pubkey = await getPubkey(address);
+  if (pubkey) return importPublicKey(pubkey);
   return null;
 }
 
