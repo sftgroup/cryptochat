@@ -295,12 +295,14 @@ groupRouter.post('/:id/messages', async (req: AuthRequest, res) => {
       data: { groupId, senderId: req.user!.userId, content: req.body.content, messageType: req.body.messageType || 'text', metadata: req.body.metadata || null, keyVersion: req.body.keyVersion || 1 },
     });
 
-    // Real-time push to all group members
+    // Real-time push to all group members — if @mentions exist, push special event
     const members = await prisma.groupMember.findMany({ where: { groupId } });
     const { pushEvent } = await import('../index.js');
+    const meta = req.body.metadata ? JSON.parse(req.body.metadata) : null;
+    const mentionedIds: string[] = meta?.mentions || [];
     for (const m of members) {
       if (m.userId !== req.user!.userId) {
-        pushEvent(m.userId, { type: 'new_group_msg', payload: { groupId } });
+        pushEvent(m.userId, { type: 'new_group_msg', payload: { groupId, mentioned: mentionedIds.includes(m.userId) ? true : false } });
       }
     }
 

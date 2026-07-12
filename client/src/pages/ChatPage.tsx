@@ -36,6 +36,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   const [newGroupDesc, setNewGroupDesc] = useState('');
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showMention, setShowMention] = useState(false);
   const [activeChat, setActiveChat] = useState<{ type: 'dm'; friend: FriendInfo } | { type: 'group'; group: GroupInfo } | null>(null);
   const [messages, setMessages] = useState<DmMessage[]>([]);
   const [composing, setComposing] = useState('');
@@ -123,6 +124,22 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
 
     const plaintext = composing.trim();
     setComposing('');
+
+    // Parse @mentions: @UserName → match group members, store userIds in mentions
+    const memberMap = new Map<string, string>(); // name → userId
+    for (const m of (activeChat.group.members || [])) {
+      const name = m.user?.displayName || m.user?.address?.slice(0, 8) + '...' || '';
+      if (name) memberMap.set(name.toLowerCase(), m.userId);
+    }
+    const mentions: string[] = [];
+    const mentionRegex = /@(\S+)/g;
+    let mm;
+    while ((mm = mentionRegex.exec(plaintext)) !== null) {
+      const uid = memberMap.get(mm[1].toLowerCase());
+      if (uid) mentions.push(uid);
+    }
+
+    const metadata = mentions.length > 0 ? JSON.stringify({ mentions }) : undefined;
     const tempId = 'local-group-' + Date.now();
 
     // Optimistic: show message immediately
@@ -133,7 +150,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
 
       const r = await fetch(`/api/groups/${activeChat.group.id}/messages`, {
         method: 'POST', headers: authStore.headers(),
-        body: JSON.stringify({ content: encrypted, keyVersion }),
+        body: JSON.stringify({ content: encrypted, keyVersion, ...(metadata ? { metadata } : {}) }),
       });
       if (r.ok) {
         const d = await r.json();
@@ -854,7 +871,13 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                         ) : (
                           <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
                             isSent ? 'bg-blue-500 text-white rounded-br-md shadow-sm' : 'bg-white text-gray-800 rounded-bl-md shadow-sm border border-gray-100'
-                          }`}>{msg.content}</div>
+                          }`}>
+                            {msg.content.split(/(@\S+)/g).map((part: string, pi: number) =>
+                              part.startsWith('@') ? (
+                                <span key={pi} className="font-semibold text-blue-600">{part}</span>
+                              ) : part
+                            )}
+                          </div>
                         )}
                         <span className="text-[10px] text-gray-400 mt-0.5 px-1">{formatChatTime(msg.time)}</span>
                       </div>
@@ -889,6 +912,33 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                       <EmojiPicker onSelect={e => setComposing(prev => prev + e)} onClose={() => setShowEmoji(false)} />
                     )}
                   </div>
+                  {/* @ mention — only in group chat */}
+                  {activeChat?.type === 'group' && (<div className="relative">
+                    <button onClick={() => setShowMention(!showMention)}
+                      className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-blue-600 rounded transition-colors text-sm font-bold cursor-pointer" title="@Mention">
+                      @
+                    </button>
+                    {showMention && (
+                      <div className="absolute bottom-10 left-0 bg-white border border-gray-200 rounded-xl shadow-xl z-50 w-52 max-h-52 overflow-y-auto py-1">
+                        {activeChat.group.members?.map((m: any) => {
+                          const name = m.user?.displayName || m.user?.address?.slice(0, 8) + '...' || 'Unknown';
+                          return (
+                            <button key={m.userId}
+                              onClick={() => {
+                                setComposing(prev => prev + `@${name} `);
+                                setShowMention(false);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center gap-2 cursor-pointer">
+                              <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                                {(name[0] || '?').toUpperCase()}
+                              </span>
+                              <span className="truncate">{name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>)}
                   <label className="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-gray-700 rounded transition-colors cursor-pointer" title="File">
                     📎
                     <input type="file" className="hidden" onChange={async (e) => {
