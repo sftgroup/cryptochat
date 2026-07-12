@@ -1,8 +1,8 @@
-import { Router } from "express";
+import { Router, type IRouter } from "express";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { prisma } from "../utils/prisma.js";
 
-export const profileRouter = Router();
+export const profileRouter: IRouter = Router();
 
 profileRouter.get("/", authMiddleware, async (req: AuthRequest, res) => {
   try {

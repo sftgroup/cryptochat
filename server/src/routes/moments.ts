@@ -54,7 +54,7 @@ momentsRouter.get('/', authMiddleware, async (req: AuthRequest, res) => {
     });
 
     // Get author info
-    const authorIds = [...new Set(moments.map(m => m.userId))];
+    const authorIds = [...new Set(moments.map((m: { userId: string }) => m.userId))];
     const users = await prisma.user.findMany({
       where: { id: { in: authorIds } },
       select: { id: true, address: true, displayName: true },
@@ -62,7 +62,7 @@ momentsRouter.get('/', authMiddleware, async (req: AuthRequest, res) => {
     const userMap = new Map(users.map((u: { id: string; address?: string; displayName?: string }) => [u.id, u]));
 
     res.json({
-      moments: moments.map(m => {
+      moments: moments.map((m: { id: string; userId: string; content: string; createdAt: Date }) => {
         const u = userMap.get(m.userId) as { address?: string; displayName?: string } | undefined;
         return {
           id: m.id,
