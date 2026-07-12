@@ -21,7 +21,7 @@ dmRouter.get('/:userId/messages', authMiddleware, async (req: AuthRequest, res) 
       take: 100,
     });
 
-    res.json({ messages: messages.map(m => ({
+    res.json({ messages: messages.map((m: { id: string; senderId: string; receiverId: string; content: string; createdAt: Date }) => ({
       id: m.id,
       content: m.content,
       sender: m.senderId,

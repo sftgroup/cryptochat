@@ -56,7 +56,7 @@ discoverRouter.get('/ceres', async (req: AuthRequest, res) => {
         select: { address: true, displayName: true, id: true },
       });
       for (const r of results) {
-        const lu = localUsers.find(u => u.address === r.address.toLowerCase());
+        const lu = localUsers.find((u: { id: string; address: string }) => u.address === r.address.toLowerCase());
         if (lu) {
           (r as any).userId = lu.id;
           r.displayName = lu.displayName || undefined;
