@@ -42,7 +42,7 @@ momentsRouter.get('/', authMiddleware, async (req: AuthRequest, res) => {
       where: { userId: req.user!.userId, status: 'accepted' },
       select: { contactId: true },
     });
-    const friendIds = contacts.map(c => c.contactId);
+    const friendIds = contacts.map((c: { contactId: string }) => c.contactId);
 
     // Show own + friends' moments
     const moments = await prisma.moment.findMany({
@@ -59,11 +59,11 @@ momentsRouter.get('/', authMiddleware, async (req: AuthRequest, res) => {
       where: { id: { in: authorIds } },
       select: { id: true, address: true, displayName: true },
     });
-    const userMap = new Map(users.map(u => [u.id, u]));
+    const userMap = new Map(users.map((u: { id: string; address?: string; displayName?: string }) => [u.id, u]));
 
     res.json({
       moments: moments.map(m => {
-        const u = userMap.get(m.userId);
+        const u = userMap.get(m.userId) as { address?: string; displayName?: string } | undefined;
         return {
           id: m.id,
           content: m.content,
