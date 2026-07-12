@@ -59,11 +59,11 @@ momentsRouter.get('/', authMiddleware, async (req: AuthRequest, res) => {
       where: { id: { in: authorIds } },
       select: { id: true, address: true, displayName: true },
     });
-    const userMap = new Map(users.map((u: { id: string; address?: string; displayName?: string }) => [u.id, u]));
+    const userMap = new Map(users.map((u: { id: string; address: string; displayName: string | null }) => [u.id, u]));
 
     res.json({
       moments: moments.map((m: { id: string; userId: string; content: string; createdAt: Date }) => {
-        const u = userMap.get(m.userId) as { address?: string; displayName?: string } | undefined;
+        const u = userMap.get(m.userId) as { address: string; displayName: string | null } | undefined;
         return {
           id: m.id,
           content: m.content,

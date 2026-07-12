@@ -43,6 +43,9 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
   const [groupInviteCode, setGroupInviteCode] = useState('');
   const [newGroupCreated, setNewGroupCreated] = useState<{ id: string; name: string; code: string } | null>(null);
   const [inviteCodeLoading, setInviteCodeLoading] = useState(false);
+  const [inviteMemberAddr, setInviteMemberAddr] = useState('');
+  const [inviteMemberLoading, setInviteMemberLoading] = useState(false);
+  const [inviteMemberMsg, setInviteMemberMsg] = useState('');
   const [addFriendAddr, setAddFriendAddr] = useState('');
   const [addFriendMsg, setAddFriendMsg] = useState('');
   const [addFriendErr, setAddFriendErr] = useState('');
@@ -168,6 +171,23 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
       const r = await fetch('/api/moments', { headers: authStore.headers() });
       if (r.ok) { const d = await r.json(); setMoments(d.moments); }
     } catch {}
+
+    // Auto-fetch group keys for all my groups
+    if (keyPairRef.current) {
+      try {
+        const user = authStore.user;
+        if (user) {
+          const gs = await getGroups();
+          for (const g of gs) {
+            const creatorMember = g.members?.find((m: any) => m.role === 'admin');
+            const creatorAddress = creatorMember?.user?.address || '';
+            if (creatorAddress) {
+              fetchMyGroupKey(g.id, creatorAddress, keyPairRef.current, user.id).catch(() => {});
+            }
+          }
+        }
+      } catch {}
+    }
   }
 
   // Fetch friend's public key — Ceres DID backend lookup (no chain RPC)
@@ -398,6 +418,51 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
       } catch {}
     } catch {}
     setCreatingGroup(false);
+  }
+
+  async function handleInviteMember() {
+    if (!activeChat || activeChat.type !== 'group' || !inviteMemberAddr.trim()) return;
+    setInviteMemberLoading(true); setInviteMemberMsg('');
+    try {
+      const r = await fetch(`/api/groups/${activeChat.group.id}/invite`, {
+        method: 'POST',
+        headers: authStore.headers(),
+        body: JSON.stringify({ address: inviteMemberAddr.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setInviteMemberMsg('✅ Member invited!');
+        setInviteMemberAddr('');
+        // Refresh group members
+        const gr = await fetch(`/api/groups/${activeChat.group.id}`, { headers: authStore.headers() });
+        if (gr.ok) {
+          const gd = await gr.json();
+          setActiveChat({ type: 'group', group: gd });
+          loadData();
+        }
+      } else {
+        setInviteMemberMsg('❌ ' + (d.error || 'Failed to invite'));
+      }
+    } catch { setInviteMemberMsg('❌ Network error'); }
+    setInviteMemberLoading(false);
+  }
+
+  async function handleLeaveGroup() {
+    if (!activeChat || activeChat.type !== 'group') return;
+    if (!confirm(`Leave "${activeChat.group.name}"?`)) return;
+    try {
+      const r = await fetch(`/api/groups/${activeChat.group.id}/leave`, {
+        method: 'POST', headers: authStore.headers(),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setActiveChat(null); setRightPanel(null); setMessages([]);
+        if (d.deleted) setAddFriendMsg('Group deleted (last member left).');
+        loadData();
+      } else {
+        alert(d.error || 'Failed to leave');
+      }
+    } catch { alert('Network error'); }
   }
 
   useEffect(() => {
@@ -907,6 +972,18 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                     )}
                   </div>
                   <div className="border-t border-gray-200 pt-3">
+                    {/* Invite member */}
+                    <p className="text-gray-400 text-[11px] uppercase tracking-wider font-semibold mb-2">Invite Member</p>
+                    <div className="flex gap-2 mb-3">
+                      <input type="text" placeholder="Wallet address" value={inviteMemberAddr} onChange={e => setInviteMemberAddr(e.target.value)}
+                        className="flex-1 text-xs bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-400" />
+                      <button onClick={handleInviteMember} disabled={inviteMemberLoading || !inviteMemberAddr.trim()}
+                        className="bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors shrink-0">
+                        {inviteMemberLoading ? '...' : 'Invite'}
+                      </button>
+                    </div>
+                    {inviteMemberMsg && <p className="text-xs mb-3 text-gray-500">{inviteMemberMsg}</p>}
+
                     <p className="text-gray-400 text-[11px] uppercase tracking-wider font-semibold mb-2">Members ({activeChat.group.members?.length || 0})</p>
                     {activeChat.group.members?.map((m: any) => { const [c1,c2] = getAvatarColor(m.user?.displayName || m.user?.address || '?'); return (
                       <div key={m.userId} className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 transition-colors">
@@ -914,6 +991,11 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                         <div className="flex-1"><div className="text-gray-800 text-xs font-medium">{m.user?.displayName || m.user?.address?.slice(0,6)+'...'+m.user?.address?.slice(-4)}</div><div className="text-gray-400 text-[11px] capitalize">{m.role}</div></div>
                       </div>
                     );})}
+
+                    <button onClick={handleLeaveGroup}
+                      className="w-full mt-3 py-2 border border-red-200 text-red-500 text-xs font-semibold rounded-lg hover:bg-red-50 transition-colors">
+                      Leave Group
+                    </button>
                   </div>
                 </div>
               )}

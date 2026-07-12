@@ -300,3 +300,35 @@ groupRouter.post('/:id/messages', async (req: AuthRequest, res) => {
     res.status(500).json({ error: 'Internal error' });
   }
 });
+
+// POST /api/groups/:id/leave — leave group
+groupRouter.post('/:id/leave', async (req: AuthRequest, res) => {
+  try {
+    const groupId = req.params.id as string;
+    const userId = req.user!.userId;
+
+    const membership = await prisma.groupMember.findUnique({
+      where: { groupId_userId: { groupId, userId } },
+    });
+    if (!membership) return res.status(404).json({ error: 'Not a member of this group' });
+
+    // If admin is leaving, check if there are other members
+    if (membership.role === 'admin') {
+      const memberCount = await prisma.groupMember.count({ where: { groupId, id: { not: membership.id } } });
+      if (memberCount === 0) {
+        // Last member leaves → delete group
+        await prisma.groupMember.deleteMany({ where: { groupId } });
+        await prisma.groupKeyEnvelope.deleteMany({ where: { groupId } });
+        await prisma.groupMessage.deleteMany({ where: { groupId } });
+        await prisma.group.delete({ where: { id: groupId } });
+        return res.json({ deleted: true });
+      }
+    }
+
+    await prisma.groupMember.delete({ where: { id: membership.id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('leave group:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
