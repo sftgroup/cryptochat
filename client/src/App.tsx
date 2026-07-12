@@ -3,6 +3,7 @@ import { useAccount, useDisconnect } from 'wagmi';
 import LoginPage from './pages/LoginPage';
 import ChatPage from './pages/ChatPage';
 import ProfilePage from './pages/ProfilePage';
+import CeresMintPage from './pages/CeresMintPage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey } from './lib/crypto';
 import { checkCeresDID, registerPubkey } from './lib/registry';
@@ -11,7 +12,7 @@ export default function App() {
   const { isConnected, address } = useAccount();
   const { disconnect } = useDisconnect();
   const [loggedIn, setLoggedIn] = useState(() => !!authStore.token);
-  const [page, setPage] = useState<'chat' | 'profile'>('chat');
+  const [page, setPage] = useState<'chat' | 'profile' | 'ceres_mint'>('chat');
   const [myAddress, setMyAddress] = useState('');
   const [ceresDID, setCeresDID] = useState<{
     hasDID: boolean;
@@ -20,6 +21,8 @@ export default function App() {
     chainId: number | null;
   }>({ hasDID: false, inviter: null, inviteeCount: 0, chainId: null });
   const [pubkeyRegistered, setPubkeyRegistered] = useState(false);
+  const [ceresChecked, setCeresChecked] = useState(false);
+  const [_ceresCheckError, setCeresCheckError] = useState(false);
 
   function handleLogin() {
     setLoggedIn(true);
@@ -47,11 +50,21 @@ export default function App() {
               inviteeCount: profile.inviteeCount,
               chainId: profile.chainId,
             });
-            console.log('[Ceres] DID status:', profile.invited ? `✅ (invited by ${profile.inviter?.slice(0,10)}...)` : '⚠️ not yet cast');
+            if (!profile.invited) {
+              // No Ceres DID → show mint page
+              setPage('ceres_mint');
+            }
+          } else {
+            setCeresCheckError(true);
+            // API 不可用 → 也显示 mint page（用户可以跳过）
+            setPage('ceres_mint');
           }
         } catch (e) {
           console.warn('[Ceres] DID check failed:', e);
+          setCeresCheckError(true);
+          setPage('ceres_mint');
         }
+        setCeresChecked(true);
 
         // 2. Generate ECDH key pair + register pubkey on backend
         const keyPair = await getOrCreateKeyPair();
@@ -86,9 +99,29 @@ export default function App() {
     setMyAddress('');
     setPubkeyRegistered(false);
     setCeresDID({ hasDID: false, inviter: null, inviteeCount: 0, chainId: null });
+    setCeresChecked(false);
+    setCeresCheckError(false);
+  }
+
+  // Ceres DID mint done
+  function handleCeresDone() {
+    setCeresDID(prev => ({ ...prev, hasDID: true }));
+    setPage('chat');
   }
 
   if (!loggedIn) return <LoginPage onLogin={handleLogin} />;
+
+  // Ceres DID mint page (shown if no DID yet)
+  if (page === 'ceres_mint' && ceresChecked) {
+    return (
+      <CeresMintPage
+        myAddress={myAddress}
+        inviterAddress={ceresDID.inviter || undefined}
+        onDone={handleCeresDone}
+      />
+    );
+  }
+
   if (page === 'profile') {
     return <ProfilePage onBack={() => setPage('chat')} onLogout={handleLogout} />;
   }
