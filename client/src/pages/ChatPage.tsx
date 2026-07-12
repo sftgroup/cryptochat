@@ -488,7 +488,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
 
       <div className="flex flex-1 overflow-hidden" style={{gap:0}}>
         {/* ═══ LEFT SIDEBAR ═══ */}
-        <aside className="w-72 flex flex-col flex-shrink-0 bg-[#ebf3fd] border-r border-gray-200">
+        <aside className="w-72 flex flex-col flex-shrink-0 bg-[#dce8f5] border-r border-gray-200">
           {/* Tab bar */}
           <div className="flex border-b border-gray-200 bg-gray-50">
             {[
