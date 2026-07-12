@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend, searchUsers, getGroups } from '../lib/api';
 import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, tryDecrypt, type KeyPair } from '../lib/crypto';
-import { getPubkey } from '../lib/registry';
+import { getPubkey, checkCeresDID } from '../lib/registry';
 import { decodeTxMessage } from '../lib/tx';
 import type { TransferPayload } from '../lib/tx';
 import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessage } from '../lib/groupKeys';
@@ -23,7 +23,7 @@ interface Props {
   onGoProfile: () => void;
 }
 
-export default function ChatPage({ myAddress, ceresDID: _ceresDID, pubkeyRegistered, onGoProfile }: Props) {
+export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoProfile }: Props) {
   const user = authStore.user!;
   const [tab, setTab] = useState<'friends' | 'groups' | 'moments' | 'requests'>('friends');
   const [friends, setFriends] = useState<FriendInfo[]>([]);
@@ -345,8 +345,22 @@ export default function ChatPage({ myAddress, ceresDID: _ceresDID, pubkeyRegiste
     setAddFriendErr(''); setAddFriendMsg('');
     if (!addFriendAddr.trim()) return;
 
+    // Validate Ceres DID on both sides
+    if (!ceresDID.hasDID) {
+      setAddFriendErr('You must mint Ceres DID before adding friends.');
+      return;
+    }
+
     try {
-      const result = await sendFriendRequest(addFriendAddr.trim());
+      // Check if target has Ceres DID
+      const targetAddr = addFriendAddr.trim().toLowerCase();
+      const profile = await checkCeresDID(targetAddr);
+      if (!profile?.invited) {
+        setAddFriendErr('This user has not minted Ceres DID yet. Only DID holders can be added.');
+        return;
+      }
+
+      const result = await sendFriendRequest(targetAddr);
       setAddFriendMsg(result.status === 'accepted' ? 'You are now friends! ✅' : 'Friend request sent! 📨');
       loadData();
     } catch (err: any) { setAddFriendErr(err.message); }
