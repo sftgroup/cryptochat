@@ -23,7 +23,6 @@ export default function App() {
   const [pubkeyRegistered, setPubkeyRegistered] = useState(false);
   const [pubkeyJson, setPubkeyJson] = useState<string>('');
   const [ceresChecked, setCeresChecked] = useState(false);
-  const [_ceresCheckError, setCeresCheckError] = useState(false);
 
   function handleLogin() {
     setLoggedIn(true);
@@ -56,13 +55,11 @@ export default function App() {
               setPage('ceres_mint');
             }
           } else {
-            setCeresCheckError(true);
-            // API 不可用 → 也显示 mint page（用户可以跳过）
+            // API 不可用 → 也显示 mint page
             setPage('ceres_mint');
           }
         } catch (e) {
           console.warn('[Ceres] DID check failed:', e);
-          setCeresCheckError(true);
           setPage('ceres_mint');
         }
         setCeresChecked(true);
@@ -97,7 +94,6 @@ export default function App() {
     setPubkeyRegistered(false);
     setCeresDID({ hasDID: false, inviter: null, inviteeCount: 0, chainId: null });
     setCeresChecked(false);
-    setCeresCheckError(false);
   }
 
   // Ceres DID mint done

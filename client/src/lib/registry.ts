@@ -83,18 +83,9 @@ export async function hasCeresDID(address: string): Promise<boolean> {
 
 // ── Pubkey（关联到 Ceres DID，存储在后台） ──
 
-/**
- * 从 CeresDID 链上查询用户 ECDH 公钥。
- * 上传 ECDH 公钥到后端（关联到 Ceres DID）
- * 纯 HTTP，无 gas，不弹钱包
- */
-export async function registerPubkey(pubkeyStr: string): Promise<void> {
-  const { authStore } = await import('./api');
-  await fetch('/api/user/pubkey', {
-    method: 'POST',
-    headers: authStore.headers(),
-    body: JSON.stringify({ publicKey: pubkeyStr }),
-  });
+/** @deprecated — pubkey is now stored on CeresDID chain, no backend needed */
+export async function registerPubkey(_pubkeyStr: string): Promise<void> {
+  // no-op — pubkey is committed to CeresDID.updateProfile during mint
 }
 
 /**
