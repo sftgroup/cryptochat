@@ -9,6 +9,7 @@ import TransferCard from '../components/TransferCard';
 import TransferForm from '../components/TransferForm';
 import RedPacketForm from '../components/RedPacketForm';
 import RedPacketCard from '../components/RedPacketCard';
+import FileCard from '../components/FileCard';
 import IpfsMomentContent from '../components/IpfsMomentContent';
 import EmojiPicker from '../components/EmojiPicker';
 
@@ -898,10 +899,14 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                           <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
                             isSent ? 'bg-blue-500 text-white rounded-br-md shadow-sm' : 'bg-white text-gray-800 rounded-bl-md shadow-sm border border-gray-100'
                           }`}>
-                            {msg.content.split(/(@\S+)/g).map((part: string, pi: number) =>
-                              part.startsWith('@') ? (
-                                <span key={pi} className="font-semibold text-blue-600">{part}</span>
-                              ) : part
+                            {msg.content.startsWith('ipfs://') ? (
+                              <FileCard cid={msg.content.replace('ipfs://', '')} />
+                            ) : (
+                              msg.content.split(/(@\S+)/g).map((part: string, pi: number) =>
+                                part.startsWith('@') ? (
+                                  <span key={pi} className="font-semibold text-blue-600">{part}</span>
+                                ) : part
+                              )
                             )}
                           </div>
                         )}
