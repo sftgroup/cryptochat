@@ -490,7 +490,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
         {/* ═══ LEFT SIDEBAR ═══ */}
         <aside className="w-72 flex flex-col flex-shrink-0 bg-[#dce8f5] border-r border-gray-200">
           {/* Tab bar */}
-          <div className="flex border-b border-gray-200 bg-gray-50">
+          <div className="flex border-b border-gray-200 bg-[#dce8f5]">
             {[
               { key: 'friends' as const, label: '💬 Friends' },
               { key: 'groups' as const, label: '👥 Groups' },
@@ -639,7 +639,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
           </div>
 
           {/* Bottom action bar */}
-          <div className="border-t border-gray-200 p-2.5 space-y-1.5 bg-gray-50">
+          <div className="border-t border-gray-200 p-2.5 space-y-1.5 bg-[#dce8f5]">
             {tab === 'groups' && (
               !showCreateGroup ? (
                 <>
