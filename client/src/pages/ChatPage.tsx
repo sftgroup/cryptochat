@@ -668,7 +668,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
         </aside>
 
         {/* ═══ CENTER CHAT AREA ═══ */}
-        <main className="flex-1 flex flex-col min-w-0 bg-[#e8eaed]">
+        <main className="flex-1 flex flex-col min-w-0 bg-white">
           {activeChat ? (
             <>
               {/* Chat header */}
@@ -702,7 +702,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
               </div>
 
               {/* Messages area */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-[#ededed]">
                 {messages.length === 0 && (
                   <div className="text-center py-12">
                     <div className="text-5xl mb-4">🔐</div>
@@ -745,7 +745,7 @@ export default function ChatPage({ myAddress, myPubkeyRegistered, onPubkeyRegist
               </div>
 
               {/* Input area — WeChat style: textarea on top, toolbar below */}
-              <div className="bg-[#f7f7f7] border-t border-gray-200">
+              <div className="bg-[#f7f7f7] border-t border-gray-300">
                 {showTransfer && <div className="px-3 pt-3"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>}
                 {/* Textarea — tall, rounded */}
                 <div className="px-3 pt-3 pb-1">
