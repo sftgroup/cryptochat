@@ -25,7 +25,7 @@ export default function LoginPage({ onLogin }: Props) {
       setLoading(true);
       try {
         const nonce = await getNonce(address);
-        const signature = await signMessageAsync({ message: nonce });
+        const signature = await signMessageAsync({ message: nonce, account: address as `0x${string}` });
         await login(address, signature);
         onLogin();
       } catch (err: any) {
