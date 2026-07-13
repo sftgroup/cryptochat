@@ -1,17 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { authStore, getFriends, getFriendRequests, sendFriendRequest, acceptFriendRequest, removeFriend, searchUsers, getGroups } from '../lib/api';
 import { getOrCreateKeyPair, importPublicKey, deriveSharedKey, encrypt, tryDecrypt, type KeyPair } from '../lib/crypto';
 import { getPubkey, checkCeresDID } from '../lib/registry';
 import { decodeTxMessage } from '../lib/tx';
 import type { TransferPayload } from '../lib/tx';
 import { setupGroupKeys, fetchMyGroupKey, encryptGroupMessage, decryptGroupMessage } from '../lib/groupKeys';
-import TransferCard from '../components/TransferCard';
-import TransferForm from '../components/TransferForm';
-import RedPacketForm from '../components/RedPacketForm';
-import RedPacketCard from '../components/RedPacketCard';
-import FileCard from '../components/FileCard';
-import IpfsMomentContent from '../components/IpfsMomentContent';
-import EmojiPicker from '../components/EmojiPicker';
+
+// Lazy sub-components (deferred until first render)
+const TransferCard = lazy(() => import('../components/TransferCard'));
+const TransferForm = lazy(() => import('../components/TransferForm'));
+const RedPacketForm = lazy(() => import('../components/RedPacketForm'));
+const RedPacketCard = lazy(() => import('../components/RedPacketCard'));
+const FileCard = lazy(() => import('../components/FileCard'));
+const IpfsMomentContent = lazy(() => import('../components/IpfsMomentContent'));
+const EmojiPicker = lazy(() => import('../components/EmojiPicker'));
+
+const InlineLoader = () => <div className="animate-pulse bg-gray-100 rounded-xl h-16 w-full" />;
 
 interface FriendInfo { userId: string; address: string; displayName: string; avatarUrl: string | null; bio: string | null; status: string; id: string; }
 interface FriendReq { id: string; userId: string; address: string; displayName: string; avatarUrl: string | null; }
@@ -910,7 +914,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                 {/* Red packets — shown as special cards above messages */}
                 {redPackets.map((rp: any) => (
                   <div key={rp.id} className="flex justify-center my-3">
-                    <RedPacketCard packetId={rp.id} userId={user.id} />
+                    <Suspense fallback={<InlineLoader />}><RedPacketCard packetId={rp.id} userId={user.id} /></Suspense>
                   </div>
                 ))}
                 {messages.map((msg, i) => {
@@ -934,13 +938,13 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                       {/* Message bubble */}
                       <div className={isSent ? 'flex flex-col items-end' : ''} style={{maxWidth:'65%'}}>
                         {txMsg ? (
-                          <TransferCard payload={txMsg.payload} isSent={isSent} />
+                          <Suspense fallback={<InlineLoader />}><TransferCard payload={txMsg.payload} isSent={isSent} /></Suspense>
                         ) : (
                           <div className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
                             isSent ? 'bg-blue-500 text-white rounded-br-md shadow-sm' : 'bg-white text-gray-800 rounded-bl-md shadow-sm border border-gray-100'
                           }`}>
                             {msg.content.startsWith('ipfs://') ? (
-                              <FileCard cid={msg.content.replace('ipfs://', '')} />
+                              <Suspense fallback={<InlineLoader />}><FileCard cid={msg.content.replace('ipfs://', '')} /></Suspense>
                             ) : (
                               msg.content.split(/(@\S+)/g).map((part: string, pi: number) =>
                                 part.startsWith('@') ? (
@@ -960,7 +964,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
 
               {/* Input area — WeChat style: textarea on top, toolbar below */}
               <div className="bg-[#f7f7f7] border-t border-gray-300">
-                {showTransfer === 'redpacket' && (<div className="px-3 pt-3"><RedPacketForm
+                {showTransfer === 'redpacket' && (<div className="px-3 pt-3"><Suspense fallback={<InlineLoader />}><RedPacketForm
                   scope={activeChat?.type === 'group' ? 'group' : 'dm'}
                   scopeId={activeChat?.type === 'group' ? activeChat.group.id : activeChat?.type === 'dm' ? activeChat.friend.userId : ''}
                   onSend={async () => { setShowTransfer(false); 
@@ -968,8 +972,8 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                     // for now refresh immediately
                     setTimeout(() => loadData(), 500);
                   }}
-                  onCancel={() => setShowTransfer(false)} /></div>)}
-                {showTransfer === 'transfer' && (<div className="px-3 pt-3"><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></div>)}
+                  onCancel={() => setShowTransfer(false)} /></Suspense></div>)}
+                {showTransfer === 'transfer' && (<div className="px-3 pt-3"><Suspense fallback={<InlineLoader />}><TransferForm onSend={sendTransfer} onCancel={() => setShowTransfer(false)} /></Suspense></div>)}
                 {/* Textarea — tall, rounded */}
                 <div className="px-3 pt-3 pb-1">
                   <textarea
@@ -989,7 +993,7 @@ export default function ChatPage({ myAddress, ceresDID, pubkeyRegistered, onGoPr
                       😊
                     </button>
                     {showEmoji && (
-                      <EmojiPicker onSelect={e => setComposing(prev => prev + e)} onClose={() => setShowEmoji(false)} />
+                      <Suspense fallback={<InlineLoader />}><EmojiPicker onSelect={e => setComposing(prev => prev + e)} onClose={() => setShowEmoji(false)} /></Suspense>
                     )}
                   </div>
                   {/* @ mention — only in group chat */}

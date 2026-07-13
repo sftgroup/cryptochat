@@ -1,12 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAccount, useDisconnect } from 'wagmi';
-import LoginPage from './pages/LoginPage';
-import ChatPage from './pages/ChatPage';
-import ProfilePage from './pages/ProfilePage';
-import CeresMintPage from './pages/CeresMintPage';
 import { authStore } from './lib/api';
 import { getOrCreateKeyPair, exportPublicKey } from './lib/crypto';
 import { checkCeresDID } from './lib/registry';
+
+// Lazy-loaded pages
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const CeresMintPage = lazy(() => import('./pages/CeresMintPage'));
+
+function LoadingFallback() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f5f5', fontFamily: 'system-ui' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 12 }}>🔐</div>
+        <div style={{ color: '#666', fontSize: 14 }}>Loading CryptChat...</div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const { isConnected, address } = useAccount();
@@ -51,25 +64,21 @@ export default function App() {
               chainId: profile.chainId,
             });
             if (!profile.invited) {
-              // No Ceres DID → show mint page
               setPage('ceres_mint');
             }
           } else {
-            // API 不可用 → 也显示 mint page
             setPage('ceres_mint');
           }
-        } catch (e) {
-          console.warn('[Ceres] DID check failed:', e);
+        } catch {
           setPage('ceres_mint');
         }
         setCeresChecked(true);
 
-        // 2. Generate ECDH key pair (pubkey will be stored on-chain when DID is minted)
+        // 2. Generate ECDH key pair
         const keyPair = await getOrCreateKeyPair();
         const pubkeyStr = exportPublicKey(keyPair.publicKey);
         setPubkeyJson(pubkeyStr);
         setPubkeyRegistered(true);
-        console.log('[ECDH] key pair ready');
       } catch (err: any) {
         console.error('[Init] error:', err);
       }
@@ -96,36 +105,40 @@ export default function App() {
     setCeresChecked(false);
   }
 
-  // Ceres DID mint done
   function handleCeresDone() {
     setCeresDID(prev => ({ ...prev, hasDID: true }));
     setPage('chat');
   }
 
-  if (!loggedIn) return <LoginPage onLogin={handleLogin} />;
+  if (!loggedIn) {
+    return <Suspense fallback={<LoadingFallback />}><LoginPage onLogin={handleLogin} /></Suspense>;
+  }
 
-  // Ceres DID mint page (shown if no DID yet)
   if (page === 'ceres_mint' && ceresChecked) {
     return (
-      <CeresMintPage
-        myAddress={myAddress}
-        inviterAddress={ceresDID.inviter || undefined}
-        pubkeyJson={pubkeyJson}
-        onDone={handleCeresDone}
-      />
+      <Suspense fallback={<LoadingFallback />}>
+        <CeresMintPage
+          myAddress={myAddress}
+          inviterAddress={ceresDID.inviter || undefined}
+          pubkeyJson={pubkeyJson}
+          onDone={handleCeresDone}
+        />
+      </Suspense>
     );
   }
 
   if (page === 'profile') {
-    return <ProfilePage onBack={() => setPage('chat')} onLogout={handleLogout} />;
+    return <Suspense fallback={<LoadingFallback />}><ProfilePage onBack={() => setPage('chat')} onLogout={handleLogout} /></Suspense>;
   }
 
   return (
-    <ChatPage
-      myAddress={myAddress}
-      ceresDID={ceresDID}
-      pubkeyRegistered={pubkeyRegistered}
-      onGoProfile={() => setPage('profile')}
-    />
+    <Suspense fallback={<LoadingFallback />}>
+      <ChatPage
+        myAddress={myAddress}
+        ceresDID={ceresDID}
+        pubkeyRegistered={pubkeyRegistered}
+        onGoProfile={() => setPage('profile')}
+      />
+    </Suspense>
   );
 }
