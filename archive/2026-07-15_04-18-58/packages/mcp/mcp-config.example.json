@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cryptchat": {
+      "command": "node",
+      "args": ["packages/mcp/dist/index.js"],
+      "env": {
+        "CRYPTCHAT_API_URL": "https://chat.team3.0xai.net",
+        "CRYPTCHAT_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
