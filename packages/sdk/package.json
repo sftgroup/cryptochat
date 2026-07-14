@@ -1,0 +1,20 @@
+{
+  "name": "@cryptchat/sdk",
+  "version": "0.1.0",
+  "description": "CryptChat SDK — Web3 encrypted messaging for wallets & dApps",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["web3", "messaging", "encrypted", "wallet", "chat"],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "viem": "^2.22.0"
+  }
+}
